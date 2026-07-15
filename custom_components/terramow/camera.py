@@ -12,7 +12,7 @@ import time
 from functools import lru_cache
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from homeassistant.components.camera import Camera
 from homeassistant.config_entries import ConfigEntry
@@ -41,7 +41,6 @@ COLOR_APP_BG = (237, 240, 244, 255)
 COLOR_MAP_BG = (244, 244, 246, 255)
 COLOR_CARD_BG = (255, 255, 255, 255)
 COLOR_CARD_BORDER = (223, 227, 233, 255)
-COLOR_SHADOW = (205, 212, 223, 90)
 COLOR_TEXT = (38, 38, 38, 255)
 COLOR_TEXT_SUBTLE = (102, 110, 122, 255)
 COLOR_TEXT_MUTED = (149, 156, 166, 255)
@@ -73,15 +72,21 @@ COLOR_PATH_CURRENT = (18, 191, 143, 132)
 COLOR_PATH_CURRENT_GLOW = (18, 191, 143, 78)
 COLOR_ORIGIN = (38, 38, 38, 180)
 
-COLOR_ROBOT_BODY = (46, 46, 47, 255)
-COLOR_ROBOT_TOP = (208, 211, 214, 255)
-COLOR_ROBOT_DETAIL = (169, 174, 179, 255)
-COLOR_ROBOT_DIR = (38, 38, 38, 255)
+# 机器人图标（还原 TerraMow 实机造型：加长圆角机身 + 前置三摄像头视觉条 + 尾部状态灯）
+COLOR_ROBOT_CHASSIS = (32, 33, 36, 255)
+COLOR_ROBOT_CHASSIS_EDGE = (58, 60, 64, 255)
+COLOR_ROBOT_DECK = (54, 56, 60, 255)
+COLOR_ROBOT_VISOR = (14, 15, 17, 255)
+COLOR_ROBOT_LENS = (120, 200, 255, 255)
+COLOR_ROBOT_ACCENT = (46, 204, 113, 255)
+COLOR_ROBOT_WHEEL = (20, 20, 21, 255)
 
-COLOR_STATION_BODY = (45, 45, 45, 255)
-COLOR_STATION_TOP = (237, 239, 240, 255)
-COLOR_STATION_LED = (51, 255, 92, 255)
-COLOR_STATION_BORDER = (190, 194, 197, 255)
+# 基站图标，采用与机器人一致的现代化视觉语言
+COLOR_STATION_BASE = (32, 33, 36, 255)
+COLOR_STATION_BASE_EDGE = (58, 60, 64, 255)
+COLOR_STATION_PAD = (54, 56, 60, 255)
+COLOR_STATION_CONTACT = (200, 205, 210, 255)
+COLOR_STATION_LED = (46, 204, 113, 255)
 
 COLOR_BADGE_RED = (169, 37, 43, 255)
 COLOR_BADGE_BLUE = (68, 117, 235, 255)
@@ -819,7 +824,7 @@ class TerraMowMapCamera(Camera):
 
         self._static_image: Image.Image | None = None
         self._robot_image: Image.Image | None = None
-        self._robot_image_mask: Image.Image | None = None
+        self._station_image: Image.Image | None = None
         self._transformer: CoordinateTransformer | None = None
         self._cached_png: bytes | None = None
         self._last_pose_state_update = 0.0
@@ -1394,22 +1399,65 @@ class TerraMowMapCamera(Camera):
         self._draw_summary_panel(image, scene)
         self._static_image = image
 
+    def _draw_shadow_layer(
+        self,
+        image: Image.Image,
+        rect: tuple[int, int, int, int],
+        radius: int,
+        blur: int,
+        offset: tuple[int, int],
+        alpha: int,
+    ) -> None:
+        """绘制单层高斯模糊投影。"""
+        shadow_layer = Image.new("RGBA", (IMAGE_WIDTH, IMAGE_HEIGHT), (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow_layer)
+        x0, y0, x1, y1 = rect
+        shadow_draw.rounded_rectangle(
+            (x0 + offset[0], y0 + offset[1], x1 + offset[0], y1 + offset[1]),
+            radius=radius,
+            fill=(20, 24, 32, alpha),
+        )
+        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(blur))
+        image.alpha_composite(shadow_layer)
+
+    def _draw_soft_shadow(self, image: Image.Image, rect: tuple[int, int, int, int], radius: int) -> None:
+        """绘制悬浮卡片投影：贴合边缘的“接触阴影” + 更大范围的柔和“环境阴影”叠加，
+        让投影轮廓清晰地呼应卡片的圆角形状，而不是一团模糊的光晕。"""
+        self._draw_shadow_layer(image, rect, radius, blur=7, offset=(0, 2), alpha=60)
+        self._draw_shadow_layer(image, rect, radius, blur=22, offset=(0, 10), alpha=38)
+
+    def _draw_card_shape(
+        self,
+        image: Image.Image,
+        rect: tuple[int, int, int, int],
+        radius: int,
+        fill: tuple[int, int, int, int],
+        outline: tuple[int, int, int, int],
+    ) -> None:
+        """局部超采样绘制卡片主体，得到平滑抗锯齿的圆角边缘。"""
+        x0, y0, x1, y1 = (int(v) for v in rect)
+        width = x1 - x0
+        height = y1 - y0
+        scale = 2
+
+        def render(draw: ImageDraw.ImageDraw, s: int) -> None:
+            draw.rounded_rectangle(
+                [0, 0, width * s - 1, height * s - 1],
+                radius=radius * s,
+                fill=fill,
+                outline=outline,
+                width=max(1, s),
+            )
+
+        self._supersample_and_composite(image, (x0, y0), (width, height), scale, render)
+
     def _draw_background(self, image: Image.Image) -> None:
         """绘制画布底色和卡片。"""
-        draw = ImageDraw.Draw(image, "RGBA")
-        draw.rounded_rectangle(MAP_RECT, radius=MAP_RADIUS, fill=COLOR_MAP_BG, outline=COLOR_CARD_BORDER)
-        draw.rounded_rectangle(
-            (MAP_RECT[0], MAP_RECT[1] + 10, MAP_RECT[2], MAP_RECT[3] + 10),
-            radius=MAP_RADIUS,
-            fill=COLOR_SHADOW,
-        )
-        draw.rounded_rectangle(MAP_RECT, radius=MAP_RADIUS, fill=COLOR_MAP_BG)
-        draw.rounded_rectangle(
-            (SUMMARY_RECT[0], SUMMARY_RECT[1] + 10, SUMMARY_RECT[2], SUMMARY_RECT[3] + 10),
-            radius=CARD_RADIUS,
-            fill=COLOR_SHADOW,
-        )
-        draw.rounded_rectangle(SUMMARY_RECT, radius=CARD_RADIUS, fill=COLOR_CARD_BG)
+        self._draw_soft_shadow(image, MAP_RECT, MAP_RADIUS)
+        self._draw_soft_shadow(image, SUMMARY_RECT, CARD_RADIUS)
+
+        self._draw_card_shape(image, MAP_RECT, MAP_RADIUS, COLOR_MAP_BG, COLOR_CARD_BORDER)
+        self._draw_card_shape(image, SUMMARY_RECT, CARD_RADIUS, COLOR_CARD_BG, COLOR_CARD_BORDER)
 
     def _draw_empty_map_card(self, image: Image.Image, scene: dict[str, Any]) -> None:
         """没有空间数据时的空地图。"""
@@ -1434,7 +1482,7 @@ class TerraMowMapCamera(Camera):
             fill=COLOR_TEXT_SUBTLE,
             font=body_font,
         )
-        self._draw_map_chips(draw, scene)
+        self._draw_map_chips(image, scene)
 
     def _draw_scene(self, image: Image.Image, scene: dict[str, Any]) -> None:
         """绘制完整场景。"""
@@ -1473,14 +1521,24 @@ class TerraMowMapCamera(Camera):
                     self._draw_polyline(draw, transformer, edge_line, COLOR_EDGE_LINE, 2)
                 center = sub_region["center"]
                 if center is not None and sub_region["order"] and sub_region["order"] > 0:
-                    self._draw_order_badge(draw, transformer.to_pixel(center[0], center[1]), sub_region["order"])
+                    self._draw_order_badge(image, transformer.to_pixel(center[0], center[1]), sub_region["order"])
                 if center is not None and sub_region["has_custom_param"]:
                     center_px = transformer.to_pixel(center[0], center[1])
-                    draw.ellipse(
-                        [center_px[0] + 12, center_px[1] - 18, center_px[0] + 22, center_px[1] - 8],
-                        fill=COLOR_PASS_THROUGH_OUTLINE,
-                        outline=COLOR_TEXT_WHITE,
-                        width=2,
+
+                    def render_custom_param_dot(draw: ImageDraw.ImageDraw, s: int) -> None:
+                        draw.ellipse(
+                            [0, 0, 10 * s - 1, 10 * s - 1],
+                            fill=COLOR_PASS_THROUGH_OUTLINE,
+                            outline=COLOR_TEXT_WHITE,
+                            width=max(1, 2 * s),
+                        )
+
+                    self._supersample_and_composite(
+                        image,
+                        (center_px[0] + 12, center_px[1] - 18),
+                        (10, 10),
+                        self._CHIP_SUPERSAMPLE,
+                        render_custom_param_dot,
                     )
 
             if len(region["boundary"]) >= 3:
@@ -1554,14 +1612,14 @@ class TerraMowMapCamera(Camera):
             self._draw_tunnel(image, draw, transformer, tunnel, COLOR_CHANNEL_SOFT, COLOR_CHANNEL)
 
         for marker in scene["cross_boundary_markers"]:
-            self._draw_marker(draw, transformer.to_pixel(marker[0], marker[1]), COLOR_CHANNEL, "diamond")
+            self._draw_marker(image, transformer.to_pixel(marker[0], marker[1]), COLOR_CHANNEL, "diamond")
         for marker in scene["trapped_points"]:
-            self._draw_marker(draw, transformer.to_pixel(marker[0], marker[1]), COLOR_BADGE_ORANGE, "triangle")
+            self._draw_marker(image, transformer.to_pixel(marker[0], marker[1]), COLOR_BADGE_ORANGE, "triangle")
         for marker in scene["maintenance_points"]:
-            self._draw_marker(draw, transformer.to_pixel(marker[0], marker[1]), COLOR_BADGE_BLUE, "hex")
+            self._draw_marker(image, transformer.to_pixel(marker[0], marker[1]), COLOR_BADGE_BLUE, "hex")
 
         if scene["move_target_point"] is not None:
-            self._draw_target(draw, transformer.to_pixel(scene["move_target_point"][0], scene["move_target_point"][1]))
+            self._draw_target(image, transformer.to_pixel(scene["move_target_point"][0], scene["move_target_point"][1]))
 
         if scene["station_pose"] is not None:
             self._draw_station(image, scene["station_pose"])
@@ -1569,7 +1627,7 @@ class TerraMowMapCamera(Camera):
         if scene["origin"] is not None:
             self._draw_origin(draw, transformer.to_pixel(scene["origin"][0], scene["origin"][1]))
 
-        self._draw_map_chips(draw, scene)
+        self._draw_map_chips(image, scene)
 
     def _composite_draw(
         self,
@@ -1727,60 +1785,111 @@ class TerraMowMapCamera(Camera):
                     fill=outline,
                 )
 
+    _CHIP_SUPERSAMPLE = 4  # 徽标/圆点等小元素的局部超采样倍率
+
+    def _supersample_and_composite(
+        self,
+        image: Image.Image,
+        top_left: tuple[int, int],
+        size: tuple[int, int],
+        scale: int,
+        draw_fn: Any,
+    ) -> None:
+        """在局部小图块上按 `scale` 倍超采样绘制，降采样后合成到主图，得到平滑抗锯齿边缘。"""
+        width, height = size
+        tile = Image.new("RGBA", (max(1, width * scale), max(1, height * scale)), COLOR_TRANSPARENT)
+        tile_draw = ImageDraw.Draw(tile, "RGBA")
+        draw_fn(tile_draw, scale)
+        tile = tile.resize((max(1, width), max(1, height)), Image.LANCZOS)
+        image.alpha_composite(tile, top_left)
+
     def _draw_marker(
         self,
-        draw: ImageDraw.ImageDraw,
+        image: Image.Image,
         center: tuple[int, int],
         color: tuple[int, int, int, int],
         kind: str,
     ) -> None:
-        """绘制点状标记。"""
+        """绘制点状标记（抗锯齿）。"""
         x, y = center
-        if kind == "diamond":
-            points = [(x, y - 8), (x + 8, y), (x, y + 8), (x - 8, y)]
-            draw.polygon(points, fill=color, outline=COLOR_TEXT_WHITE)
-        elif kind == "triangle":
-            points = [(x, y - 9), (x + 8, y + 7), (x - 8, y + 7)]
-            draw.polygon(points, fill=color, outline=COLOR_TEXT_WHITE)
-            draw.text((x - 2, y - 5), "!", fill=COLOR_TEXT_WHITE, font=_load_font(12, bold=True))
-        elif kind == "hex":
-            points = [
-                (x - 7, y),
-                (x - 3, y - 6),
-                (x + 3, y - 6),
-                (x + 7, y),
-                (x + 3, y + 6),
-                (x - 3, y + 6),
-            ]
-            draw.polygon(points, fill=color, outline=COLOR_TEXT_WHITE)
-        else:
-            draw.ellipse([x - 6, y - 6, x + 6, y + 6], fill=color)
+        size = 20
+        half = size // 2
+
+        def render(draw: ImageDraw.ImageDraw, s: int) -> None:
+            cx = cy = half * s
+            if kind == "diamond":
+                points = [(cx, cy - 8 * s), (cx + 8 * s, cy), (cx, cy + 8 * s), (cx - 8 * s, cy)]
+                draw.polygon(points, fill=color, outline=COLOR_TEXT_WHITE)
+            elif kind == "triangle":
+                points = [(cx, cy - 9 * s), (cx + 8 * s, cy + 7 * s), (cx - 8 * s, cy + 7 * s)]
+                draw.polygon(points, fill=color, outline=COLOR_TEXT_WHITE)
+                font = _load_font(12 * s, bold=True)
+                box = draw.textbbox((0, 0), "!", font=font)
+                draw.text(
+                    (cx - (box[0] + box[2]) / 2, cy - 2 * s - (box[1] + box[3]) / 2),
+                    "!",
+                    fill=COLOR_TEXT_WHITE,
+                    font=font,
+                )
+            elif kind == "hex":
+                points = [
+                    (cx - 7 * s, cy),
+                    (cx - 3 * s, cy - 6 * s),
+                    (cx + 3 * s, cy - 6 * s),
+                    (cx + 7 * s, cy),
+                    (cx + 3 * s, cy + 6 * s),
+                    (cx - 3 * s, cy + 6 * s),
+                ]
+                draw.polygon(points, fill=color, outline=COLOR_TEXT_WHITE)
+            else:
+                draw.ellipse([cx - 6 * s, cy - 6 * s, cx + 6 * s, cy + 6 * s], fill=color)
+
+        self._supersample_and_composite(image, (x - half, y - half), (size, size), self._CHIP_SUPERSAMPLE, render)
 
     def _draw_order_badge(
         self,
-        draw: ImageDraw.ImageDraw,
+        image: Image.Image,
         center: tuple[int, int],
         order: int,
     ) -> None:
-        """绘制顺序徽标。"""
+        """绘制顺序徽标（抗锯齿）。"""
         x, y = center
-        draw.ellipse([x - 16, y - 16, x + 16, y + 16], fill=COLOR_BADGE_RED, outline=COLOR_TEXT_WHITE, width=2)
-        font = _load_font(16, bold=True)
-        text = str(order)
-        box = draw.textbbox((0, 0), text, font=font)
-        draw.text(
-            (x - (box[2] - box[0]) / 2, y - (box[3] - box[1]) / 2 - 1),
-            text,
-            fill=COLOR_TEXT_WHITE,
-            font=font,
-        )
+        diameter = 32
+        half = diameter // 2
 
-    def _draw_target(self, draw: ImageDraw.ImageDraw, center: tuple[int, int]) -> None:
-        """绘制目标点。"""
+        def render(draw: ImageDraw.ImageDraw, s: int) -> None:
+            draw.ellipse(
+                [0, 0, diameter * s - 1, diameter * s - 1],
+                fill=COLOR_BADGE_RED,
+                outline=COLOR_TEXT_WHITE,
+                width=max(1, 2 * s),
+            )
+            font = _load_font(16 * s, bold=True)
+            text = str(order)
+            box = draw.textbbox((0, 0), text, font=font)
+            center = diameter * s / 2
+            draw.text(
+                (center - (box[0] + box[2]) / 2, center - (box[1] + box[3]) / 2),
+                text,
+                fill=COLOR_TEXT_WHITE,
+                font=font,
+            )
+
+        self._supersample_and_composite(image, (x - half, y - half), (diameter, diameter), self._CHIP_SUPERSAMPLE, render)
+
+    def _draw_target(self, image: Image.Image, center: tuple[int, int]) -> None:
+        """绘制目标点（抗锯齿）。"""
         x, y = center
-        draw.ellipse([x - 18, y - 18, x + 18, y + 18], outline=COLOR_BADGE_BLUE, width=3)
-        draw.ellipse([x - 10, y - 10, x + 10, y + 10], outline=COLOR_BADGE_BLUE, width=2)
-        draw.ellipse([x - 3, y - 3, x + 3, y + 3], fill=COLOR_BADGE_BLUE)
+        size = 40
+        half = size // 2
+
+        def render(draw: ImageDraw.ImageDraw, s: int) -> None:
+            c = half * s
+            draw.ellipse([c - 18 * s, c - 18 * s, c + 18 * s, c + 18 * s], outline=COLOR_BADGE_BLUE, width=max(1, 3 * s))
+            draw.ellipse([c - 10 * s, c - 10 * s, c + 10 * s, c + 10 * s], outline=COLOR_BADGE_BLUE, width=max(1, 2 * s))
+            draw.ellipse([c - 3 * s, c - 3 * s, c + 3 * s, c + 3 * s], fill=COLOR_BADGE_BLUE)
+
+        self._supersample_and_composite(image, (x - half, y - half), (size, size), self._CHIP_SUPERSAMPLE, render)
 
     def _draw_origin(self, draw: ImageDraw.ImageDraw, center: tuple[int, int]) -> None:
         """绘制原点标记。"""
@@ -1891,56 +2000,144 @@ class TerraMowMapCamera(Camera):
             18,
         )
 
+    _ICON_SUPERSAMPLE = 10  # 图标先按该倍率超采样绘制，再降采样，获得抗锯齿的平滑边缘
+
+    @staticmethod
+    def _build_station_icon() -> Image.Image:
+        """按 TerraMow 基站的实际造型（充电底座 + 靠背墙 + 触点）绘制现代化图标。"""
+        scale = TerraMowMapCamera._ICON_SUPERSAMPLE
+        size = 40 * scale
+        cx = cy = 20 * scale
+        img = Image.new("RGBA", (size, size), COLOR_TRANSPARENT)
+        draw = ImageDraw.Draw(img, "RGBA")
+
+        wall_w = 20 * scale
+        wall_h = 6 * scale
+        wall_box = (cx - wall_w / 2, cy - 15 * scale, cx + wall_w / 2, cy - 15 * scale + wall_h)
+
+        pad_w = 18 * scale
+        pad_len = 24 * scale
+        pad_box = (cx - pad_w / 2, cy - 12 * scale, cx + pad_w / 2, cy - 12 * scale + pad_len)
+
+        draw.rounded_rectangle(
+            (pad_box[0] - scale, cy - 12 * scale, pad_box[2] + scale, pad_box[3] + scale),
+            radius=4 * scale,
+            fill=(20, 20, 20, 55),
+        )
+        draw.rounded_rectangle(
+            pad_box, radius=4 * scale, fill=COLOR_STATION_BASE, outline=COLOR_STATION_BASE_EDGE, width=max(1, scale // 3)
+        )
+
+        inset = 2.4 * scale
+        inset_box = (pad_box[0] + inset, pad_box[1] + inset, pad_box[2] - inset, pad_box[3] - inset)
+        draw.rounded_rectangle(inset_box, radius=3 * scale, fill=COLOR_STATION_PAD)
+
+        contact_y = pad_box[1] + inset * 1.8
+        for offset_x in (-4 * scale, 4 * scale):
+            draw.rounded_rectangle(
+                (
+                    cx + offset_x - 1.4 * scale,
+                    contact_y,
+                    cx + offset_x + 1.4 * scale,
+                    contact_y + 1.6 * scale,
+                ),
+                radius=scale * 0.6,
+                fill=COLOR_STATION_CONTACT,
+            )
+
+        draw.rounded_rectangle(
+            wall_box, radius=2.4 * scale, fill=COLOR_STATION_BASE, outline=COLOR_STATION_BASE_EDGE, width=max(1, scale // 3)
+        )
+
+        led_r = 1.3 * scale
+        led_cx, led_cy = cx, (wall_box[1] + wall_box[3]) / 2
+        draw.ellipse([led_cx - led_r, led_cy - led_r, led_cx + led_r, led_cy + led_r], fill=COLOR_STATION_LED)
+
+        return img.resize((40, 40), Image.LANCZOS)
+
     def _draw_station(self, image: Image.Image, pose: dict[str, float]) -> None:
         """绘制基站。"""
         transformer = self._transformer
         if transformer is None:
             return
 
-        x = 20
-        y = 20
-
-        w = 40
-        h = 40
-
-        station = Image.new('RGBA', (w, h), COLOR_TRANSPARENT)
-        draw = ImageDraw.Draw(station, 'RGBA')
-
-        draw.rounded_rectangle(
-            [x - 14, y - 18, x + 14, y + 18],
-            radius=10,
-            fill=COLOR_STATION_BODY,
-        )
-        draw.rounded_rectangle(
-            [x - 10, y - 10, x + 10, y + 12],
-            radius=8,
-            fill=COLOR_STATION_TOP,
-            outline=COLOR_STATION_BORDER,
-            width=1,
-        )
-        draw.ellipse([x - 4, y - 13, x + 4, y - 5], fill=COLOR_STATION_LED)
-
-        station_mask = station.copy()
-        draw_mask = ImageDraw.Draw(station_mask)
-        draw_mask.rounded_rectangle(
-            [x - 14, y - 18, x + 14, y + 18],
-            radius=10,
-            fill=COLOR_STATION_BODY,
-        )
+        if self._station_image is None:
+            self._station_image = self._build_station_icon()
 
         theta = _coerce_angle_radians(pose.get("theta"), milli_radian=True)
         deg = theta * 180 / math.pi
         deg = deg - 90
 
-        station_rotated = station.rotate(-deg, expand=True, fillcolor=COLOR_TRANSPARENT)
-        station_mask_rotated = station_mask.rotate(-deg, expand=True, fillcolor=COLOR_TRANSPARENT)
+        station_rotated = self._station_image.rotate(-deg, expand=True, resample=Image.BICUBIC, fillcolor=COLOR_TRANSPARENT)
 
         cx, cy = transformer.to_pixel(pose["x"], pose["y"])
-        
-        image.paste(station_rotated,
-                  (cx - station_rotated.width // 2, cy - station_rotated.height // 2),
-                  station_mask_rotated)        
 
+        image.paste(
+            station_rotated,
+            (cx - station_rotated.width // 2, cy - station_rotated.height // 2),
+            station_rotated,
+        )
+
+
+    @staticmethod
+    def _build_robot_icon() -> Image.Image:
+        """按 TerraMow 实机造型（加长圆角机身 + 前置三摄像头视觉条 + 尾部状态灯）绘制现代化图标。
+
+        机身长宽比参考实机尺寸（约 60.2 x 39.4 cm），前端（镜头一侧）朝向图像上方（-Y）。
+        先在超采样画布上绘制，再降采样到目标尺寸，得到平滑抗锯齿的边缘。
+        """
+        scale = TerraMowMapCamera._ICON_SUPERSAMPLE
+        size = 40 * scale
+        cx = cy = 20 * scale
+        img = Image.new("RGBA", (size, size), COLOR_TRANSPARENT)
+        draw = ImageDraw.Draw(img, "RGBA")
+
+        body_half_w = 11 * scale
+        half_len_front = 15 * scale
+        half_len_back = 13 * scale
+        radius = 7 * scale
+        body_box = (cx - body_half_w, cy - half_len_front, cx + body_half_w, cy + half_len_back)
+
+        draw.rounded_rectangle(
+            (body_box[0] - scale, body_box[1] + 2 * scale, body_box[2] + scale, body_box[3] + 3 * scale),
+            radius=radius,
+            fill=(20, 20, 20, 60),
+        )
+
+        draw.rounded_rectangle(
+            body_box, radius=radius, fill=COLOR_ROBOT_CHASSIS, outline=COLOR_ROBOT_CHASSIS_EDGE, width=max(1, scale // 3)
+        )
+
+        wheel_w = 3 * scale
+        wheel_h = 6 * scale
+        for side in (-1, 1):
+            wx = cx + side * (body_half_w - scale)
+            wy = cy + half_len_back - wheel_h / 2
+            draw.rounded_rectangle(
+                (wx - wheel_w / 2, wy - wheel_h / 2, wx + wheel_w / 2, wy + wheel_h / 2),
+                radius=scale,
+                fill=COLOR_ROBOT_WHEEL,
+            )
+
+        inset = 3 * scale
+        deck_box = (body_box[0] + inset, body_box[1] + inset * 1.6, body_box[2] - inset, body_box[3] - inset)
+        draw.rounded_rectangle(deck_box, radius=radius - scale, fill=COLOR_ROBOT_DECK)
+
+        visor_h = 4 * scale
+        visor_top = body_box[1] + inset * 0.6
+        visor_box = (body_box[0] + inset * 0.5, visor_top, body_box[2] - inset * 0.5, visor_top + visor_h)
+        draw.rounded_rectangle(visor_box, radius=scale, fill=COLOR_ROBOT_VISOR)
+
+        lens_y = (visor_box[1] + visor_box[3]) / 2
+        lens_r = max(1.0, scale * 0.6)
+        for lens_x in (cx - 6 * scale, cx, cx + 6 * scale):
+            draw.ellipse([lens_x - lens_r, lens_y - lens_r, lens_x + lens_r, lens_y + lens_r], fill=COLOR_ROBOT_LENS)
+
+        led_r = 1.4 * scale
+        led_y = body_box[3] - inset * 1.4
+        draw.ellipse([cx - led_r, led_y - led_r, cx + led_r, led_y + led_r], fill=COLOR_ROBOT_ACCENT)
+
+        return img.resize((40, 40), Image.LANCZOS)
 
     def _draw_robot(self, image: Image.Image) -> None:
         """绘制实时机器人位置。"""
@@ -1955,25 +2152,8 @@ class TerraMowMapCamera(Camera):
         x = display_pose["x"]
         y = display_pose["y"]
 
-        if (self._robot_image is None):
-
-            px = 20
-            py = 20
-
-            w = 40
-            h = 40
-            
-            self._robot_image = Image.new('RGBA', (w, h), COLOR_TRANSPARENT)
-            draw = ImageDraw.Draw(self._robot_image, 'RGBA')
-
-            draw.ellipse([px - 16, py - 20, px + 16, py + 20], fill=COLOR_ROBOT_BODY)
-            draw.ellipse([px - 12, py - 15, px + 12, py + 4], fill=COLOR_ROBOT_TOP)
-            draw.rectangle([px - 14, py + 5, px + 14, py + 12], fill=COLOR_ROBOT_DETAIL)
-
-            self._robot_image_mask = self._robot_image.copy()
-            draw_mask = ImageDraw.Draw(self._robot_image_mask)
-            draw_mask.ellipse([px - 16, py - 20, px + 16, py + 20], fill=COLOR_ROBOT_BODY)
-
+        if self._robot_image is None:
+            self._robot_image = self._build_robot_icon()
 
         yaw = display_pose.get("yaw")
         if yaw is None:
@@ -1984,150 +2164,64 @@ class TerraMowMapCamera(Camera):
         deg = yaw * 180 / math.pi
         deg = deg - 90
 
-        robot_rotated = self._robot_image.rotate(-deg, expand=True, fillcolor=COLOR_TRANSPARENT)
-        robot_mask_rotated = self._robot_image_mask.rotate(-deg, expand=True, fillcolor=COLOR_TRANSPARENT)
+        robot_rotated = self._robot_image.rotate(-deg, expand=True, resample=Image.BICUBIC, fillcolor=COLOR_TRANSPARENT)
 
-        image.paste(robot_rotated,
-                  (cx - robot_rotated.width // 2, cy - robot_rotated.height // 2),
-                  robot_mask_rotated)
+        image.paste(
+            robot_rotated,
+            (cx - robot_rotated.width // 2, cy - robot_rotated.height // 2),
+            robot_rotated,
+        )
 
 
-    def _draw_map_chips(self, draw: ImageDraw.ImageDraw, scene: dict[str, Any]) -> None:
+    def _draw_map_chips(self, image: Image.Image, scene: dict[str, Any]) -> None:
         """绘制地图上方摘要标签。"""
         name = self._map_data.get("name") or f"Map #{self._map_data.get('id', '-')}"
         state = _enum_label(self._map_data.get("map_state"))
 
         left = MAP_RECT[0] + 18
         top = MAP_RECT[1] + 18
-        self._draw_chip(draw, (left, top), _truncate(name, 26), COLOR_CARD_BG, COLOR_TEXT)
+        self._draw_chip(image, (left, top), _truncate(name, 26), COLOR_CARD_BG, COLOR_TEXT)
         badge_color = COLOR_BADGE_BLUE if "Complete" in state else COLOR_BADGE_ORANGE if state != "-" else COLOR_BADGE_GRAY
-        self._draw_chip(draw, (left, top + 42), state, badge_color, COLOR_TEXT_WHITE)
+        self._draw_chip(image, (left, top + 42), state, badge_color, COLOR_TEXT_WHITE)
 
     def _draw_chip(
         self,
-        draw: ImageDraw.ImageDraw,
+        image: Image.Image,
         location: tuple[int, int],
         text: str,
         fill: tuple[int, int, int, int],
         text_color: tuple[int, int, int, int],
+        *,
+        width: int | None = None,
+        height: int = 32,
+        radius: int = 16,
+        font_size: int = 15,
+        padding: int = 24,
     ) -> None:
-        """绘制圆角标签。"""
+        """绘制圆角标签（局部超采样，边缘平滑）。"""
         x, y = location
-        width = self._chip_width(text)
-        height = 32
-        font = _load_font(15, bold=True)
-        draw.rounded_rectangle([x, y, x + width, y + height], radius=16, fill=fill)
-        box = draw.textbbox((0, 0), text, font=font)
-        draw.text(
-            (x + (width - (box[2] - box[0])) / 2, y + (height - (box[3] - box[1])) / 2 - 1),
-            text,
-            fill=text_color,
-            font=font,
-        )
+        if width is None:
+            width = self._chip_width(text, font_size=font_size, padding=padding)
 
-    def _chip_width(self, text: str) -> int:
+        def render(draw: ImageDraw.ImageDraw, s: int) -> None:
+            draw.rounded_rectangle([0, 0, width * s, height * s], radius=radius * s, fill=fill)
+            font = _load_font(font_size * s, bold=True)
+            box = draw.textbbox((0, 0), text, font=font)
+            draw.text(
+                ((width * s - (box[0] + box[2])) / 2, (height * s - (box[1] + box[3])) / 2),
+                text,
+                fill=text_color,
+                font=font,
+            )
+
+        self._supersample_and_composite(image, (x, y), (width, height), self._CHIP_SUPERSAMPLE, render)
+
+    def _chip_width(self, text: str, font_size: int = 15, padding: int = 24) -> int:
         """计算标签宽度。"""
-        font = _load_font(15, bold=True)
+        font = _load_font(font_size, bold=True)
         dummy = Image.new("RGBA", (1, 1))
         draw = ImageDraw.Draw(dummy)
         box = draw.textbbox((0, 0), text, font=font)
-        return int(box[2] - box[0] + 24)
+        return int(box[2] - box[0] + padding)
 
-    def _draw_summary_panel(self, image: Image.Image, scene: dict[str, Any]) -> None:
-        """绘制底部摘要信息。"""
-        draw = ImageDraw.Draw(image, "RGBA")
-        left, top, right, bottom = SUMMARY_RECT
-        width = right - left
-        title_font = _load_font(15, bold=True)
-        label_font = _load_font(13)
-        value_font = _load_font(18, bold=True)
-        chip_font = _load_font(13, bold=True)
-
-        grid_top = top + 18
-        grid_left = left + 22
-        grid_width = width - 44
-        cell_width = grid_width / 4
-        cell_height = 42
-
-        flags = []
-        if self._map_data.get("has_bird_view"):
-            flags.append(f"Bird {self._map_data.get('bird_view_index', 0)}")
-        if self._map_data.get("enable_advanced_edge_cutting"):
-            flags.append("Adv Edge")
-        flags.append("Locked" if self._map_data.get("is_boundary_locked") else "Unlocked")
-        flags.append("Build Map" if self._map_data.get("is_able_to_run_build_map") else "Build Off")
-
-        backup_info = self._map_data.get("backup_info_list", [])
-        backup_text = "Off"
-        if self._map_data.get("has_backup") or backup_info:
-            backup_text = f"{len(backup_info) if isinstance(backup_info, list) else 0} item"
-        metrics = [
-            ("Map", _truncate(f"#{self._map_data.get('id', '-')} · {self._map_data.get('name', '-')}", 22)),
-            ("Area", _format_area(self._map_data.get("total_area"))),
-            ("Mode", _truncate(_enum_label(self._map_data.get("clean_info", {}).get("mode")), 20)),
-            ("Size", _truncate(_format_size(self._map_data), 24)),
-            ("Origin", _format_point(_point_tuple(self._map_data.get("origin")))),
-            ("Backup", _truncate(f"{backup_text} · {_format_file_size(self._map_data.get('file_size'))}", 24)),
-            ("Flags", _truncate(" / ".join(flags), 24)),
-        ]
-
-        for index, (label, value) in enumerate(metrics):
-            row = index // 4
-            column = index % 4
-            x = grid_left + column * cell_width
-            y = grid_top + row * cell_height
-            draw.text((x, y), label, fill=COLOR_TEXT_MUTED, font=label_font)
-            draw.text((x, y + 16), value, fill=COLOR_TEXT, font=value_font)
-
-        chip_y = bottom - 46
-        chip_x = left + 22
-        count_chips = [
-            f"R {scene['scene_counts']['regions']}/{scene['scene_counts']['sub_regions']}",
-            f"No-go {scene['scene_counts']['forbidden_zones'] + scene['scene_counts']['physical_forbidden_zones']}",
-            f"Pass {scene['scene_counts']['pass_through_zones']}",
-            f"Tunnel {scene['scene_counts']['cross_boundary_tunnels'] + scene['scene_counts']['virtual_cross_boundary_tunnels']}",
-        ]
-        for chip in count_chips:
-            box = draw.textbbox((0, 0), chip, font=chip_font)
-            chip_width = box[2] - box[0] + 20
-            if chip_x + chip_width > right - 22:
-                break
-            draw.rounded_rectangle(
-                [chip_x, chip_y, chip_x + chip_width, chip_y + 28],
-                radius=14,
-                fill=COLOR_MAP_BG,
-            )
-            draw.text((chip_x + 10, chip_y + 6), chip, fill=COLOR_TEXT_SUBTLE, font=chip_font)
-            chip_x += chip_width + 10
-
-        title = "Map Snapshot"
-        title_box = draw.textbbox((0, 0), title, font=title_font)
-        title_x = right - 22 - (title_box[2] - title_box[0])
-        draw.text((title_x, top + 18), title, fill=COLOR_TEXT_SUBTLE, font=title_font)
-
-    def _render_final_image(self) -> bytes:
-        """渲染最终图像。"""
-        if self._cached_png is not None:
-            return self._cached_png
-
-        if self._static_image is None:
-            return _render_placeholder()
-
-        image = self._static_image.copy()
-        self._draw_robot(image)
-
-        buffer = io.BytesIO()
-        image.convert("RGB").save(buffer, format="PNG")
-        result = buffer.getvalue()
-        self._cached_png = result
-        return result
-
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    """初始化 camera 平台。"""
-    basic_data = hass.data[DOMAIN][config_entry.entry_id]
-    async_add_entities([TerraMowMapCamera(basic_data, hass)])
+    def _draw_summary_panel(self, image: 
