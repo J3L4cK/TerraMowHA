@@ -1576,7 +1576,7 @@ class TerraMowMapCamera(Camera):
         title_font = _load_font(28, bold=True)
         body_font = _load_font(18)
         title = self._map_data.get("name") or "TerraMow Map"
-        subtitle = "地图元数据已收到，但没有可绘制的空间点"
+        subtitle = "Map metadata received, but no spatial data to draw yet"
         title_box = draw.textbbox((0, 0), title, font=title_font)
         body_box = draw.textbbox((0, 0), subtitle, font=body_font)
         center_x = (MAP_RECT[0] + MAP_RECT[2]) / 2
