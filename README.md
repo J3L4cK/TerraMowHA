@@ -1,4 +1,6 @@
-# TerraMow for Home Assistant
+# TerraMow CE for Home Assistant
+
+> This is a community fork (domain `terramow_ce`) that can be installed side by side with the official TerraMow integration.
 
 <div align="center">
   <p>
@@ -25,15 +27,17 @@ This is a Home Assistant integration for TerraMow robotic lawn mowers.
 #### Method 1: HACS (Recommended)
 1. Make sure [HACS](https://hacs.xyz/) is installed
 2. Go to HACS → Integrations → Three dots menu (⋮) → Custom repositories
-3. Add `https://github.com/TerraMow/TerraMowHA` as repository URL with category "Integration"
-4. Go to HACS → Integrations → + → Search for "TerraMow"
+3. Add the URL of this fork as repository URL with category "Integration"
+4. Go to HACS → Integrations → + → Search for "TerraMow CE"
 5. Install and restart Home Assistant
 
 #### Method 2: Manual Installation
-1. Copy the `custom_components/terramow` folder to your Home Assistant `/config/custom_components` folder
+1. Copy the `custom_components/terramow_ce` folder to your Home Assistant `/config/custom_components` folder
 2. Restart Home Assistant
 3. Go to Settings → Devices & Services → Add Integration
-4. Search for "TerraMow" and follow the configuration steps
+4. Search for "TerraMow CE" and follow the configuration steps
+
+Because this fork uses its own domain (`terramow_ce`), it can be installed alongside the official TerraMow integration without conflicts.
 
 ### Configuration
 
@@ -53,10 +57,4 @@ Open an issue on [GitHub](https://github.com/TerraMow/TerraMowHA/issues) for sup
 
 ### Developer Information
 
-For developers interested in understanding or extending this integration, please refer to the [Developer Guide](docs/en/developers.md).
-
----
-
-## License
-
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+For develope

@@ -19,12 +19,12 @@ fi
 
 # 2. 创建符号链接 (如果不存在)
 CUSTOM_COMPONENTS_DIR="$HA_CORE_PATH/config/custom_components"
-TERRAMOW_LINK="$CUSTOM_COMPONENTS_DIR/terramow"
+TERRAMOW_LINK="$CUSTOM_COMPONENTS_DIR/terramow_ce"
 
 if [ ! -L "$TERRAMOW_LINK" ]; then
     echo "创建符号链接..."
     mkdir -p "$CUSTOM_COMPONENTS_DIR"
-    ln -sf "$TERRAMOW_PATH/custom_components/terramow" "$TERRAMOW_LINK"
+    ln -sf "$TERRAMOW_PATH/custom_components/terramow_ce" "$TERRAMOW_LINK"
     echo "✅ 符号链接已创建: $TERRAMOW_LINK"
 else
     echo "✅ 符号链接已存在"
@@ -57,4 +57,4 @@ echo ""
 echo "使用方法:"
 echo "1. 启动 Home Assistant: cd $HA_CORE_PATH && source venv/bin/activate && python -m homeassistant --config config"
 echo "2. 或在 VS Code 中使用调试配置启动"
-echo "3. 运行测试: pytest tests/components/terramow/ -v"
+echo "3. 运行测试: pytest tests/components/terramo

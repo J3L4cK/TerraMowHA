@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "terramow-ha"
+name = "terramow-ce-ha"
 version = "0.1.0"
 description = "Home Assistant integration for TerraMow robotic lawn mowers"
 readme = "README.md"
@@ -44,7 +44,7 @@ ignore = [
 ]
 
 [tool.ruff.isort]
-known-first-party = ["custom_components.terramow"]
+known-first-party = ["custom_components.terramow_ce"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -60,4 +60,4 @@ ignore_missing_imports = true
 
 [tool.black]
 target-version = ["py312"]
-line-length = 88
+line-lengt
