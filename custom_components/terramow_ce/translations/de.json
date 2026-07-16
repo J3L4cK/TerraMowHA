@@ -1,7 +1,8 @@
 {
     "config": {
         "abort": {
-            "already_configured": "Das Gerät ist bereits konfiguriert"
+            "already_configured": "Das Gerät ist bereits konfiguriert",
+            "reconfigure_successful": "Die Neukonfiguration war erfolgreich"
         },
         "error": {
             "cannot_connect": "Verbindung fehlgeschlagen",
@@ -14,6 +15,12 @@
                     "host": "Host",
                     "password": "Passwort",
                     "username": "Benutzername"
+                }
+            },
+            "reconfigure": {
+                "data": {
+                    "host": "Host",
+                    "password": "Passwort"
                 }
             }
         }
@@ -100,6 +107,26 @@
                     "unavailable": "Nicht verfügbar",
                     "no_config": "Keine Konfiguration"
                 }
+            },
+            "battery_temperature_state": {
+                "name": "Akkutemperaturstatus"
+            },
+            "fault_reason": {
+                "name": "Störungs-/Wartegrund",
+                "state": {
+                    "none": "Keine",
+                    "error": "Fehler",
+                    "low_battery": "Niedriger Akkustand",
+                    "raining": "Regen",
+                    "mow_motor_overheat": "Mähmotor überhitzt",
+                    "wheel_overheat": "Antriebsmotor überhitzt",
+                    "night_time": "Nachtzeit",
+                    "waiting_for_rain_to_stop": "Wartet auf Ende des Regens",
+                    "waiting_for_daylight": "Wartet auf Tageslicht",
+                    "cooling_down_motor": "Motor kühlt ab",
+                    "defogging": "Entfeuchtung",
+                    "waiting_in_station": "Wartet in der Basisstation"
+                }
             }
         },
         "camera": {
@@ -110,6 +137,9 @@
         "binary_sensor": {
             "charging_state": {
                 "name": "Ladestatus"
+            },
+            "mqtt_connected": {
+                "name": "MQTT verbunden"
             }
         },
         "select": {
@@ -169,6 +199,11 @@
             "multiple_direction_angle2": {
                 "name": "Zweiter Richtungswinkel"
             }
+        },
+        "update": {
+            "firmware_compatibility": {
+                "name": "Firmware-Kompatibilität"
+            }
         }
     },
     "state": {
@@ -178,5 +213,19 @@
         "changing_mode": "Ändere den Modus",
         "active": "Aktiv",
         "pending": "Warte auf Bestätigung"
+    },
+    "issues": {
+        "firmware_upgrade_required": {
+            "title": "TerraMow Firmware-Update erforderlich",
+            "description": "{message}\n\nGerät: {host}\n\nAktualisieren Sie die TerraMow-Firmware über die TerraMow-App. Dieses Problem wird automatisch behoben, sobald die Firmware eine kompatible Version meldet."
+        },
+        "plugin_downgrade_recommended": {
+            "title": "TerraMow CE Update empfohlen",
+            "description": "{message}\n\nGerät: {host}\n\nAktualisieren Sie die TerraMow-CE-Integration (oder installieren Sie eine passende Version), um diese Firmware vollständig zu unterstützen."
+        },
+        "firmware_incompatible": {
+            "title": "TerraMow Firmware inkompatibel",
+            "description": "{message}\n\nGerät: {host}\n\nDie gemeldete Firmware-Version konnte keinem bekannten Kompatibilitätsstatus zugeordnet werden. Überprüfen Sie die Firmware-Version in der TerraMow-App und die Version der Integration."
+        }
     }
 }
