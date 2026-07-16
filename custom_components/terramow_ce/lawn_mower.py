@@ -225,6 +225,7 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
         self.has_error = False
         self.power_mode: PowerMode | None = None
         self.back_to_station_reason = BackToStationReason.BACK_TO_STATION_REASON_NONE
+        self._mqtt_connected: bool = False  # 是否已连接到割草机的 MQTT Broker
 
         self.cmd_seq = random.randint(0, 0xFFFFFFFF)  # 生成随机的指令序号
 
@@ -262,6 +263,16 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
         self._device_model = model_name
 
     @property
+    def mqtt_connected(self) -> bool:
+        """是否已连接到割草机的 MQTT Broker。
+
+        与 activity==ERROR 不同：activity 会把“MQTT 断线”和“割草机自己
+        报告了故障”混在一起，用户没法区分。这个属性只反映连接本身，
+        供 binary_sensor.mqtt_connected 使用。
+        """
+        return self._mqtt_connected
+
+    @property
     def fault_reason(self) -> str:
         """返回一个稳定的、用户可读的“为什么不在工作”原因字符串。
 
@@ -296,6 +307,7 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
             "has_error": self.has_error,
             "back_to_station_reason": self.back_to_station_reason.value if self.back_to_station_reason else None,
             "fault_reason": self.fault_reason,
+            "mqtt_connected": self.mqtt_connected,
         }
 
     def _can_accept_command(self):
@@ -636,6 +648,7 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
                         consecutive_failures, e,
                     )
                 # 设置错误状态
+                self._mqtt_connected = False
                 self.activity = LawnMowerActivity.ERROR
                 self.schedule_update_ha_state()
                 # 指数退避，封顶 MQTT_RECONNECT_MAX_DELAY；用可中断的等待以便立即停止。
@@ -649,6 +662,7 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
         """Callback when connected to MQTT Broker."""
         if rc == 0:
             _LOGGER.info("MQTT connected")
+            self._mqtt_connected = True
             # 订阅主题
             for dp_id in range(201):
                 topic = f"data_point/{dp_id}/robot"
@@ -680,12 +694,14 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
             self.update_activity_from_state()
         else:
             _LOGGER.error(f"MQTT connection failed with code {rc}")
+            self._mqtt_connected = False
             # 设置错误状态
             self.activity = LawnMowerActivity.ERROR
             self.schedule_update_ha_state()
 
     def on_mqtt_disconnect(self, _client, _userdata, rc):  # type: ignore[misc]
         """Callback when disconnected from MQTT Broker."""
+        self._mqtt_connected = False
         if rc != 0:
             _LOGGER.warning(f"Unexpected MQTT disconnection: {rc}")
             # 断开连接后自动重连
@@ -1429,6 +1445,7 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
         self._reset_path_retry()
         self._reset_history_path_retry()
         self._reset_pending_meta()
+        self._mqtt_connected = False
         if self.mqtt_client:
             # disconnect() 让 loop_forever() 返回，工作线程才能看到 stop 事件并退出。
             self.mqtt_client.disconnect()

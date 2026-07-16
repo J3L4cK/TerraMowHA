@@ -127,6 +127,9 @@
         "binary_sensor": {
             "charging_state": {
                 "name": "Charging State"
+            },
+            "mqtt_connected": {
+                "name": "MQTT Connected"
             }
         },
         "select": {

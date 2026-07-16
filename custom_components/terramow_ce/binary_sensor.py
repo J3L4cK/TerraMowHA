@@ -27,6 +27,7 @@ async def async_setup_entry(
 
     entities = [
         TerraMowChargingSensor(basic_data, hass),
+        TerraMowMqttConnectedSensor(basic_data, hass),
     ]
 
     async_add_entities(entities)
@@ -83,3 +84,51 @@ class TerraMowChargingSensor(BinarySensorEntity):
     def available(self):
         """Return True if entity is available."""
         return self.basic_data.lawn_mower is not None
+
+
+class TerraMowMqttConnectedSensor(BinarySensorEntity):
+    """Whether the integration currently has an MQTT connection to the mower.
+
+    lawn_mower.py used to fold "we lost the MQTT connection" and "the
+    mower itself reported a fault" into the same activity=ERROR state,
+    with no way to tell them apart from the UI. This entity reflects
+    connectivity on its own.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "mqtt_connected"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        basic_data: TerraMowBasicData,
+        hass: HomeAssistant,
+    ) -> None:
+        """Initialize the connectivity sensor."""
+        super().__init__()
+        self.basic_data = basic_data
+        self.host = self.basic_data.host
+        self.hass = hass
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={('TerraMowLawnMower', self.basic_data.host)},
+            name='TerraMow',
+            manufacturer='TerraMow',
+            model=self.basic_data.lawn_mower.device_model
+        )
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for this entity."""
+        return f"lawn_mower.terramow@{self.host}.mqtt_connected"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if MQTT is currently connected."""
+        if not hasattr(self.basic_data, 'lawn_mower') or not self.basic_data.lawn_mower:
+            return None
+        return self.basic_data.lawn_mower.mqtt_connected
