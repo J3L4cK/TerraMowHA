@@ -117,6 +117,9 @@
                     "defogging": "Defogging",
                     "waiting_in_station": "Waiting in Station"
                 }
+            },
+            "battery_temperature_state": {
+                "name": "Battery Temperature State"
             }
         },
         "camera": {

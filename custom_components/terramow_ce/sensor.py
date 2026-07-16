@@ -853,6 +853,9 @@ async def async_setup_entry(
 
         # 故障/等待原因传感器
         FaultReasonSensor(basic_data, hass),
+
+        # 电池温度状态传感器
+        BatteryTemperatureStateSensor(basic_data, hass),
     ]
     
     async_add_entities(entities)
@@ -1036,3 +1039,69 @@ class FaultReasonSensor(SensorEntity):
             'mission_state': lawn_mower.mission_state.value if lawn_mower.mission_state else None,
             'back_to_station_reason': lawn_mower.back_to_station_reason.value if lawn_mower.back_to_station_reason else None,
         }
+
+
+class BatteryTemperatureStateSensor(SensorEntity):
+    """Battery thermal status, pulled out of dp_108 into its own entity.
+
+    The device does not report a numeric battery temperature in degrees
+    anywhere in this payload -- 'tempreture' (sic) is a coarse thermal
+    state string (e.g. "TEMPRETURE_NORMAL"), not a measurement. It was
+    previously only visible buried inside BatterySensor's attributes,
+    with a typo silently patched at read time. This gives it a proper,
+    named, diagnostic entity of its own instead. If the firmware ever
+    starts reporting a real numeric reading, this should be replaced
+    with a SensorDeviceClass.TEMPERATURE sensor.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:thermometer"
+    _attr_translation_key = "battery_temperature_state"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        basic_data: TerraMowBasicData,
+        hass: HomeAssistant,
+    ) -> None:
+        super().__init__()
+        self.basic_data = basic_data
+        self.host = basic_data.host
+        self.hass = hass
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={('TerraMowLawnMower', self.basic_data.host)},
+            name='TerraMow',
+            manufacturer='TerraMow',
+            model=self.basic_data.lawn_mower.device_model
+        )
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for this entity."""
+        return f"lawn_mower.terramow@{self.host}.battery_temperature_state"
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.basic_data.lawn_mower is not None
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the raw thermal-state string reported by the device."""
+        if not hasattr(self.basic_data, 'lawn_mower') or not self.basic_data.lawn_mower:
+            return None
+
+        battery_status = self.basic_data.lawn_mower.battery_status
+        if not battery_status:
+            return None
+
+        raw_value = battery_status.get('tempreture')
+        if raw_value is None:
+            return None
+        # 修正设备固件里的拼写（TEMPRETURE -> TEMPERATURE），与
+        # BatterySensor.extra_state_attributes 里的历史处理保持一致。
+        return str(raw_value).replace('TEMPRETURE', 'TEMPERATURE')
