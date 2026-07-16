@@ -1603,6 +1603,7 @@ class TerraMowMapCamera(Camera):
         if transformer is None:
             return
 
+        extent_rect: tuple[int, int, int, int] | None = None
         if scene["map_extent"]:
             pixels = transformer.to_pixels(scene["map_extent"])
             draw.polygon(
@@ -1610,6 +1611,9 @@ class TerraMowMapCamera(Camera):
                 fill=COLOR_MAP_DEFAULT_FILL,
                 outline=COLOR_MAP_DEFAULT_OUTLINE,
             )
+            extent_xs = [point[0] for point in pixels]
+            extent_ys = [point[1] for point in pixels]
+            extent_rect = (min(extent_xs), min(extent_ys), max(extent_xs), max(extent_ys))
 
         for region in scene["regions"]:
             for sub_region in region["sub_regions"]:
@@ -1748,7 +1752,7 @@ class TerraMowMapCamera(Camera):
         self._draw_scale_bar(image, transformer)
         compass_center = (MAP_RECT[2] - 22 - 22, MAP_RECT[1] + 22 + 22)
         self._draw_orientation_compass(image, compass_center, scene.get("rotation_deg", 0.0))
-        self._draw_legend(image, scene)
+        self._draw_legend(image, scene, extent_rect)
 
     def _composite_draw(
         self,
@@ -2443,8 +2447,13 @@ class TerraMowMapCamera(Camera):
         badge_color = COLOR_BADGE_BLUE if "Complete" in state else COLOR_BADGE_ORANGE if state != "-" else COLOR_BADGE_GRAY
         self._draw_chip(image, (left, top + 42), state, badge_color, COLOR_TEXT_WHITE)
 
-    def _draw_legend(self, image: Image.Image, scene: dict[str, Any]) -> None:
-        """在地图卡片右下角绘制颜色图例，只展示场景中实际存在的分类。"""
+    def _draw_legend(
+        self,
+        image: Image.Image,
+        scene: dict[str, Any],
+        extent_rect: tuple[int, int, int, int] | None = None,
+    ) -> None:
+        """在地图范围（灰色底图矩形）右下角绘制颜色图例，只展示场景中实际存在的分类。"""
         selected_count = sum(
             1 for region in scene["regions"] for sub_region in region["sub_regions"] if sub_region["selected"]
         )
@@ -2479,8 +2488,14 @@ class TerraMowMapCamera(Camera):
         pad_y = 8
         pill_width = row_width + pad_x * 2
         pill_height = 16 + pad_y * 2
-        pill_left = MAP_RECT[2] - 26 - pill_width
-        pill_top = MAP_RECT[3] - 26 - pill_height
+
+        # 以灰色底图矩形（地图范围）为基准，右侧和底部使用相同的间距
+        bounds_right, bounds_bottom = (
+            (extent_rect[2], extent_rect[3]) if extent_rect is not None else (MAP_RECT[2] - 4, MAP_RECT[3] - 4)
+        )
+        gap = 16
+        pill_left = bounds_right - gap - pill_width
+        pill_top = bounds_bottom - gap - pill_height
 
         self._draw_card_shape(
             image,
