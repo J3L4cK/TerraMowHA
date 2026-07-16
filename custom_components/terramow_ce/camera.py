@@ -33,7 +33,7 @@ IMAGE_HEIGHT = 1024
 # 布局
 OUTER_MARGIN = 40
 MAP_RECT = (40, 40, 984, 728)
-SUMMARY_RECT = (40, 760, 984, 928)
+SUMMARY_RECT = (40, 760, 984, 968)
 MAP_PADDING = 24
 MAP_RADIUS = 28
 CARD_RADIUS = 24
@@ -2589,6 +2589,49 @@ class TerraMowMapCamera(Camera):
         box = draw.textbbox((0, 0), text, font=font)
         return int(box[2] - box[0] + padding)
 
+    def _wrap_flags_two_lines(
+        self,
+        draw: ImageDraw.ImageDraw,
+        flags: list[str],
+        font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+        max_width: float,
+    ) -> tuple[str, str]:
+        """把 flags 列表按 ' / ' 分隔逐项装入两行，超出两行的部分用省略号截断。"""
+        if not flags:
+            return "-", ""
+        lines: list[str] = []
+        current = ""
+        remaining: list[str] = list(flags)
+        while remaining and len(lines) < 2:
+            item = remaining[0]
+            candidate = item if not current else f"{current} / {item}"
+            box = draw.textbbox((0, 0), candidate, font=font)
+            if (box[2] - box[0]) <= max_width or not current:
+                current = candidate
+                remaining.pop(0)
+            else:
+                lines.append(current)
+                current = ""
+        if current:
+            lines.append(current)
+        while len(lines) < 2:
+            lines.append("")
+        first, second = lines[0], lines[1]
+        if remaining and second:
+            # 第二行仍放不下全部内容，截断并加省略号
+            while remaining:
+                box = draw.textbbox((0, 0), second + " …", font=font)
+                if (box[2] - box[0]) <= max_width:
+                    break
+                if " / " in second:
+                    second = second.rsplit(" / ", 1)[0]
+                else:
+                    second = second[:-1]
+                    if not second:
+                        break
+            second = f"{second} …" if remaining else second
+        return first, second
+
     def _draw_summary_panel(self, image: Image.Image, scene: dict[str, Any]) -> None:
         """绘制底部摘要信息。"""
         draw = ImageDraw.Draw(image, "RGBA")
@@ -2618,6 +2661,8 @@ class TerraMowMapCamera(Camera):
         if self._map_data.get("has_backup") or backup_info:
             backup_text = f"{len(backup_info) if isinstance(backup_info, list) else 0} item"
         status_label, status_value, status_dot_color = self._get_status_metric()
+        # Flags 的内容长度取决于设备实际状态，可能远超其他字段（远多于一个格子能容纳的宽度），
+        # 因此不再挤进 4 列网格的某一格，而是单独占一整行，必要时换行显示，避免被截断到看不全。
         metrics = [
             ("Map", _truncate(f"#{self._map_data.get('id', '-')} · {self._map_data.get('name', '-')}", 22)),
             ("Area", _format_area(self._map_data.get("total_area"))),
@@ -2625,7 +2670,6 @@ class TerraMowMapCamera(Camera):
             ("Size", _truncate(_format_size(self._map_data), 24)),
             ("Origin", _format_point(_point_tuple(self._map_data.get("origin")))),
             ("Backup", _truncate(f"{backup_text} · {_format_file_size(self._map_data.get('file_size'))}", 24)),
-            ("Flags", _truncate(" / ".join(flags), 24)),
             (status_label, _truncate(status_value, 26)),
         ]
 
@@ -2636,7 +2680,7 @@ class TerraMowMapCamera(Camera):
             column = index % 4
             x = grid_left + column * cell_width
             y = grid_top + row * cell_height
-            if label == status_label and index == 7:
+            if label == status_label and index == len(metrics) - 1:
                 dot_r = 4
                 dot_cy = y + 6
                 draw.ellipse(
@@ -2647,12 +2691,32 @@ class TerraMowMapCamera(Camera):
             else:
                 draw.text((x, y), label, fill=COLOR_TEXT_MUTED, font=label_font)
 
-            # 值文本过长时自动降级到更小字号，避免溢出到相邻格子（例如 Flags）
+            # 值文本过长时自动降级到更小字号，避免溢出到相邻格子
             value_box = draw.textbbox((0, 0), value, font=value_font_large)
             value_font = value_font_large if (value_box[2] - value_box[0]) <= available_width else value_font_small
             draw.text((x, y + 16), value, fill=COLOR_TEXT, font=value_font)
 
-        chip_y = bottom - 46
+        # Flags：独占一整行，宽度约为整个网格宽度，长度不够才降级字号，再不够就自动换行（最多两行）
+        flags_row_y = grid_top + 2 * cell_height
+        flags_text = " / ".join(flags) if flags else "-"
+        draw.text((grid_left, flags_row_y), "Flags", fill=COLOR_TEXT_MUTED, font=label_font)
+        flags_value_y = flags_row_y + 16
+        full_box = draw.textbbox((0, 0), flags_text, font=value_font_large)
+        if (full_box[2] - full_box[0]) <= grid_width:
+            draw.text((grid_left, flags_value_y), flags_text, fill=COLOR_TEXT, font=value_font_large)
+            flags_block_height = 16 + 22
+        else:
+            small_box = draw.textbbox((0, 0), flags_text, font=value_font_small)
+            if (small_box[2] - small_box[0]) <= grid_width:
+                draw.text((grid_left, flags_value_y), flags_text, fill=COLOR_TEXT, font=value_font_small)
+                flags_block_height = 16 + 18
+            else:
+                line1, line2 = self._wrap_flags_two_lines(draw, flags, value_font_small, grid_width)
+                draw.text((grid_left, flags_value_y), line1, fill=COLOR_TEXT, font=value_font_small)
+                draw.text((grid_left, flags_value_y + 18), line2, fill=COLOR_TEXT, font=value_font_small)
+                flags_block_height = 16 + 18 + 18
+
+        chip_y = max(bottom - 46, flags_row_y + flags_block_height + 8)
         chip_x = left + 22
         count_chips = [
             f"R {scene['scene_counts']['regions']}/{scene['scene_counts']['sub_regions']}",
