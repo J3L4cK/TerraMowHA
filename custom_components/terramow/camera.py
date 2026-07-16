@@ -1746,7 +1746,7 @@ class TerraMowMapCamera(Camera):
 
         self._draw_map_chips(image, scene)
         self._draw_scale_bar(image, transformer)
-        compass_center = (MAP_RECT[2] - 22 - 22, MAP_RECT[3] - 22 - 22)
+        compass_center = (MAP_RECT[2] - 22 - 22, MAP_RECT[1] + 22 + 22)
         self._draw_orientation_compass(image, compass_center, scene.get("rotation_deg", 0.0))
         self._draw_legend(image, scene)
 
@@ -2444,7 +2444,7 @@ class TerraMowMapCamera(Camera):
         self._draw_chip(image, (left, top + 42), state, badge_color, COLOR_TEXT_WHITE)
 
     def _draw_legend(self, image: Image.Image, scene: dict[str, Any]) -> None:
-        """在地图卡片右上角绘制颜色图例，只展示场景中实际存在的分类。"""
+        """在地图卡片右下角绘制颜色图例，只展示场景中实际存在的分类。"""
         selected_count = sum(
             1 for region in scene["regions"] for sub_region in region["sub_regions"] if sub_region["selected"]
         )
@@ -2476,7 +2476,7 @@ class TerraMowMapCamera(Camera):
 
         total_width = sum(widths) + len(items) * (dot_r * 2 + dot_text_gap) + (len(items) - 1) * item_gap
         x = MAP_RECT[2] - 22 - total_width
-        y = MAP_RECT[1] + 24
+        y = MAP_RECT[3] - 24
 
         for (label, color), text_width in zip(items, widths):
             draw.ellipse([x, y - dot_r, x + dot_r * 2, y + dot_r], fill=color)
