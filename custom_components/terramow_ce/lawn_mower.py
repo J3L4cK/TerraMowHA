@@ -100,6 +100,37 @@ class BackToStationReason(Enum):
     BACK_TO_STATION_REASON_WHEEL_OVERHEAT = "BACK_TO_STATION_REASON_WHEEL_OVERHEAT"
     BACK_TO_STATION_REASON_NIGHT_TIME = "BACK_TO_STATION_REASON_NIGHT_TIME"
 
+# dp_107 状态到用户可读“故障/等待原因”的映射。
+# has_error 只是一个布尔位，没有附带具体原因；但设备已经在同一条
+# 消息里给出了 back_to_station_reason（为什么回基站）和部分
+# sub_mission（例如等雨停、给电机降温）。之前这两个字段解析后就被
+# 丢弃了，从未提供给用户。这里把它们规整成一个稳定的字符串集合，
+# 供 sensor.py 里的 FaultReasonSensor 使用。
+BACK_TO_STATION_REASON_KEYS: dict["BackToStationReason", str] = {
+    BackToStationReason.BACK_TO_STATION_REASON_NONE: "none",
+    BackToStationReason.BACK_TO_STATION_REASON_LOW_BATTERY: "low_battery",
+    BackToStationReason.BACK_TO_STATION_REASON_RAINING: "raining",
+    BackToStationReason.BACK_TO_STATION_REASON_MOW_MOTOR_OVERHEAT: "mow_motor_overheat",
+    BackToStationReason.BACK_TO_STATION_REASON_WHEEL_OVERHEAT: "wheel_overheat",
+    BackToStationReason.BACK_TO_STATION_REASON_NIGHT_TIME: "night_time",
+}
+
+# sub_mission 值中，表示“机器在等待某个外部条件、暂时不工作”的子集。
+WAIT_SUB_MISSION_KEYS: dict["SubMission", str] = {
+    SubMission.SUB_MISSION_WAIT_FOR_RAIN_TO_STOP: "waiting_for_rain_to_stop",
+    SubMission.SUB_MISSION_WAIT_FOR_DAYLIGHT: "waiting_for_daylight",
+    SubMission.SUB_MISSION_COOLING_DOWN_MOTOR: "cooling_down_motor",
+    SubMission.SUB_MISSION_DEFOGGING: "defogging",
+    SubMission.SUB_MISSION_FLEXIBLE_STATION_WAIT: "waiting_in_station",
+}
+
+FAULT_REASON_OPTIONS: list[str] = list(dict.fromkeys([
+    "none",
+    "error",
+    *BACK_TO_STATION_REASON_KEYS.values(),
+    *WAIT_SUB_MISSION_KEYS.values(),
+]))
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -192,6 +223,8 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
         self.sub_mission = SubMission.SUB_MISSION_IDLE
         self.mission_state = MissionState.MISSION_STATE_IDLE
         self.has_error = False
+        self.power_mode: PowerMode | None = None
+        self.back_to_station_reason = BackToStationReason.BACK_TO_STATION_REASON_NONE
 
         self.cmd_seq = random.randint(0, 0xFFFFFFFF)  # 生成随机的指令序号
 
@@ -227,6 +260,44 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
     def device_model(self, model_name: str) -> None:
         """更新设备型号"""
         self._device_model = model_name
+
+    @property
+    def fault_reason(self) -> str:
+        """返回一个稳定的、用户可读的“为什么不在工作”原因字符串。
+
+        设备只给 has_error 一个布尔位，没有具体错误码；但
+        back_to_station_reason（回基站原因）和部分 sub_mission
+        （等雨停/给电机降温/等天亮）本身就是很有用的诊断信息，
+        只是之前从未被暴露出来。这里把它们规整为一个稳定取值集合
+        （见 FAULT_REASON_OPTIONS），供 FaultReasonSensor 使用。
+        """
+        if self.has_error:
+            return "error"
+
+        if self.mission in self._get_recharge_missions():
+            reason_key = BACK_TO_STATION_REASON_KEYS.get(self.back_to_station_reason)
+            if reason_key and reason_key != "none":
+                return reason_key
+
+        wait_key = WAIT_SUB_MISSION_KEYS.get(self.sub_mission)
+        if wait_key:
+            return wait_key
+
+        return "none"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return diagnostic attributes for the lawn mower entity."""
+        return {
+            "mission": self.mission.value if self.mission else None,
+            "sub_mission": self.sub_mission.value if self.sub_mission else None,
+            "mission_state": self.mission_state.value if self.mission_state else None,
+            "power_mode": self.power_mode.value if self.power_mode else None,
+            "has_error": self.has_error,
+            "back_to_station_reason": self.back_to_station_reason.value if self.back_to_station_reason else None,
+            "fault_reason": self.fault_reason,
+        }
+
     def _can_accept_command(self):
         """Check if control commands can be accepted"""
         now = time.monotonic()
@@ -494,6 +565,8 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
         self.sub_mission = data.get("sub_mission", self.sub_mission)
         self.mission_state = data.get("state", self.mission_state)
         self.has_error = data.get("has_error", self.has_error)
+        self.power_mode = data.get("power_mode", self.power_mode)
+        self.back_to_station_reason = data.get("back_to_station_reason", self.back_to_station_reason)
 
         _LOGGER.debug("Mission state updated: mission=%s->%s, sub_mission=%s->%s, state=%s->%s, error=%s->%s",
                      old_mission, self.mission, old_sub_mission, self.sub_mission,

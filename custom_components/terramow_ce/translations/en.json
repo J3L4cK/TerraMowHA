@@ -100,6 +100,23 @@
                     "unavailable": "Unavailable",
                     "no_config": "No Configuration"
                 }
+            },
+            "fault_reason": {
+                "name": "Fault Reason",
+                "state": {
+                    "none": "None",
+                    "error": "Error",
+                    "low_battery": "Low Battery",
+                    "raining": "Raining",
+                    "mow_motor_overheat": "Mow Motor Overheating",
+                    "wheel_overheat": "Wheel Overheating",
+                    "night_time": "Night Time",
+                    "waiting_for_rain_to_stop": "Waiting for Rain to Stop",
+                    "waiting_for_daylight": "Waiting for Daylight",
+                    "cooling_down_motor": "Cooling Down Motor",
+                    "defogging": "Defogging",
+                    "waiting_in_station": "Waiting in Station"
+                }
             }
         },
         "camera": {
@@ -137,12 +154,12 @@
                 "name": "Main Direction Mode",
                 "state": {
                     "MAIN_DIRECTION_MODE_SINGLE": "Single Direction",
-                    "MAIN_DIRECTION_MODE_MULTIPLE": "Multiple Directions", 
+                    "MAIN_DIRECTION_MODE_MULTIPLE": "Multiple Directions",
                     "MAIN_DIRECTION_MODE_AUTO_ROTATE": "Auto Rotate Direction"
                 },
                 "options": {
                     "MAIN_DIRECTION_MODE_SINGLE": "Single Direction",
-                    "MAIN_DIRECTION_MODE_MULTIPLE": "Multiple Directions", 
+                    "MAIN_DIRECTION_MODE_MULTIPLE": "Multiple Directions",
                     "MAIN_DIRECTION_MODE_AUTO_ROTATE": "Auto Rotate Direction"
                 }
             }

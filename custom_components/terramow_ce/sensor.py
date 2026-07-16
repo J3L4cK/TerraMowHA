@@ -30,6 +30,7 @@ from .const import (
     BASE_STATION_MAINTENANCE_CYCLE_MINUTES,
     MOW_SPEED_TYPES,
 )
+from .lawn_mower import FAULT_REASON_OPTIONS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -849,6 +850,9 @@ async def async_setup_entry(
         
         # 主方向状态传感器
         MainDirectionStatusSensor(basic_data, hass),
+
+        # 故障/等待原因传感器
+        FaultReasonSensor(basic_data, hass),
     ]
     
     async_add_entities(entities)
@@ -961,3 +965,74 @@ class MainDirectionStatusSensor(SensorEntity):
         
         return attrs
     
+
+
+class FaultReasonSensor(SensorEntity):
+    """Surfaces *why* the mower is in an error/paused/returning state.
+
+    The device only reports a bare has_error boolean on its own, but the
+    same status message also carries back_to_station_reason (why it's
+    heading to the dock: low battery, rain, overheating, night time) and,
+    for some sub-missions, a reason it's temporarily waiting (for rain to
+    stop, for daylight, for the motor to cool down). Previously these were
+    parsed and then discarded. This sensor exposes a stable, translatable
+    value for automations/dashboards instead of a generic "Error" state.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:alert-circle-outline"
+    _attr_translation_key = "fault_reason"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = FAULT_REASON_OPTIONS.copy()
+
+    def __init__(
+        self,
+        basic_data: TerraMowBasicData,
+        hass: HomeAssistant,
+    ) -> None:
+        super().__init__()
+        self.basic_data = basic_data
+        self.host = basic_data.host
+        self.hass = hass
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={('TerraMowLawnMower', self.basic_data.host)},
+            name='TerraMow',
+            manufacturer='TerraMow',
+            model=self.basic_data.lawn_mower.device_model
+        )
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for this entity."""
+        return f"lawn_mower.terramow@{self.host}.fault_reason"
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.basic_data.lawn_mower is not None
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the current fault/wait reason."""
+        if not self.basic_data.lawn_mower:
+            return None
+        return self.basic_data.lawn_mower.fault_reason
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the raw status fields behind the summarized value."""
+        lawn_mower = self.basic_data.lawn_mower
+        if not lawn_mower:
+            return {}
+        return {
+            'has_error': lawn_mower.has_error,
+            'mission': lawn_mower.mission.value if lawn_mower.mission else None,
+            'sub_mission': lawn_mower.sub_mission.value if lawn_mower.sub_mission else None,
+            'mission_state': lawn_mower.mission_state.value if lawn_mower.mission_state else None,
+            'back_to_station_reason': lawn_mower.back_to_station_reason.value if lawn_mower.back_to_station_reason else None,
+        }
