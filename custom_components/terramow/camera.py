@@ -1749,7 +1749,7 @@ class TerraMowMapCamera(Camera):
             self._draw_origin(draw, transformer.to_pixel(scene["origin"][0], scene["origin"][1]))
 
         self._draw_map_chips(image, scene)
-        self._draw_scale_bar(image, transformer)
+        self._draw_scale_bar(image, transformer, extent_rect)
         compass_half = 22
         compass_gap = 16
         compass_bounds_right, compass_bounds_top = (
@@ -2074,8 +2074,13 @@ class TerraMowMapCamera(Camera):
 
     _SCALE_BAR_NICE_VALUES_MM = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000]
 
-    def _draw_scale_bar(self, image: Image.Image, transformer: CoordinateTransformer) -> None:
-        """绘制比例尺（选取一个整数距离，使其像素长度落在合理范围内）。"""
+    def _draw_scale_bar(
+        self,
+        image: Image.Image,
+        transformer: CoordinateTransformer,
+        extent_rect: tuple[int, int, int, int] | None = None,
+    ) -> None:
+        """绘制比例尺（选取一个整数距离，使其像素长度落在合理范围内）。左端与灰色地图范围矩形的左下角对齐。"""
         scale = transformer._scale  # 像素 / 毫米
         if scale <= 0:
             return
@@ -2096,8 +2101,11 @@ class TerraMowMapCamera(Camera):
         bar_y = text_h + gap  # 条形在图块内的局部 y 坐标，上方留出文字空间
         tile_height = bar_y + tick + 2
 
-        x0 = MAP_RECT[0] + 22
-        y0 = MAP_RECT[3] - 22 - tile_height + bar_y  # 使条形本身落在期望的 y0 位置
+        bounds_left, bounds_bottom = (
+            (extent_rect[0], extent_rect[3]) if extent_rect is not None else (MAP_RECT[0] + 22, MAP_RECT[3] - 4)
+        )
+        x0 = bounds_left
+        y0 = bounds_bottom - 22 - tile_height + bar_y  # 使条形本身落在期望的 y0 位置
 
         def render(draw: ImageDraw.ImageDraw, s: int) -> None:
             draw.line(
