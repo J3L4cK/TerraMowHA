@@ -757,7 +757,7 @@ def _format_area(total_area_tenths: Any) -> str:
     area = _coerce_float(total_area_tenths)
     if area is None:
         return "-"
-    return f"{area / 10:.1f}㎡"
+    return f"{area / 10:.1f} m²"
 
 
 def _format_file_size(value: Any) -> str:
