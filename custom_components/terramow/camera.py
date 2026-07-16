@@ -977,8 +977,7 @@ class TerraMowMapCamera(Camera):
         self.async_write_ha_state()
 
     def _get_status_metric(self) -> tuple[str, str, tuple[int, int, int, int]]:
-        """汇总电量、充电状态与作业进度，供摘要面板展示。返回 (label, value, dot_color)。"""
-        lawn_mower = self.basic_data.lawn_mower
+        """汇总电量与充电状态，供摘要面板的 Battery 格子展示。返回 (label, value, dot_color)。"""
         charging = self._get_battery_connected()
         percent = self._battery_percent
 
@@ -991,32 +990,33 @@ class TerraMowMapCamera(Camera):
             dot_color = COLOR_BATTERY_GOOD
         if charging:
             dot_color = COLOR_BATTERY_CHARGING
+            battery_text = f"{battery_text} · Charging" if percent is not None else "Charging"
+
+        return "Battery", battery_text, dot_color
+
+    def _get_activity_summary(self) -> str:
+        """汇总当前作业状态与进度，用于摘要面板右上角（替代原先的静态标题）。"""
+        lawn_mower = self.basic_data.lawn_mower
+        if lawn_mower is None:
+            return ""
 
         activity_text = None
-        if lawn_mower is not None:
-            activity = getattr(lawn_mower, "activity", None)
-            if activity is not None:
-                raw = getattr(activity, "value", activity)
-                activity_text = str(raw).replace("_", " ").title()
+        activity = getattr(lawn_mower, "activity", None)
+        if activity is not None:
+            raw = getattr(activity, "value", activity)
+            activity_text = str(raw).replace("_", " ").title()
 
-        work_data = lawn_mower.current_work_data if lawn_mower is not None else {}
+        work_data = lawn_mower.current_work_data
         progress_text = None
         if isinstance(work_data, dict) and work_data:
             total_area = _coerce_float(work_data.get("total_area"))
             clean_area = _coerce_float(work_data.get("clean_area"))
             if total_area and total_area > 0 and clean_area is not None:
                 progress_pct = max(0, min(100, round(clean_area / total_area * 100)))
-                progress_text = f"{progress_pct}% mowed"
+                progress_text = f"{progress_pct}%"
 
-        parts = [battery_text]
-        if charging:
-            parts.append("Charging")
-        elif activity_text:
-            parts.append(activity_text)
-        if progress_text:
-            parts.append(progress_text)
-
-        return "Battery", " · ".join(parts), dot_color
+        parts = [part for part in (activity_text, progress_text) if part]
+        return " · ".join(parts)
 
     def _get_battery_connected(self) -> bool | None:
         """读取当前是否已连接充电器。"""
@@ -2530,7 +2530,8 @@ class TerraMowMapCamera(Camera):
         width = right - left
         title_font = _load_font(15, bold=True)
         label_font = _load_font(13)
-        value_font = _load_font(18, bold=True)
+        value_font_large = _load_font(18, bold=True)
+        value_font_small = _load_font(14, bold=True)
 
         grid_top = top + 18
         grid_left = left + 22
@@ -2562,6 +2563,8 @@ class TerraMowMapCamera(Camera):
             (status_label, _truncate(status_value, 26)),
         ]
 
+        available_width = cell_width - 6  # 与右侧相邻格子留出的安全边距
+
         for index, (label, value) in enumerate(metrics):
             row = index // 4
             column = index % 4
@@ -2577,6 +2580,10 @@ class TerraMowMapCamera(Camera):
                 draw.text((x + dot_r * 2 + 4, y), label, fill=COLOR_TEXT_MUTED, font=label_font)
             else:
                 draw.text((x, y), label, fill=COLOR_TEXT_MUTED, font=label_font)
+
+            # 值文本过长时自动降级到更小字号，避免溢出到相邻格子（例如 Flags）
+            value_box = draw.textbbox((0, 0), value, font=value_font_large)
+            value_font = value_font_large if (value_box[2] - value_box[0]) <= available_width else value_font_small
             draw.text((x, y + 16), value, fill=COLOR_TEXT, font=value_font)
 
         chip_y = bottom - 46
@@ -2605,10 +2612,11 @@ class TerraMowMapCamera(Camera):
             )
             chip_x += chip_width + 10
 
-        title = "Map Snapshot"
-        title_box = draw.textbbox((0, 0), title, font=title_font)
-        title_x = right - 22 - (title_box[2] - title_box[0])
-        draw.text((title_x, top + 18), title, fill=COLOR_TEXT_SUBTLE, font=title_font)
+        activity_summary = self._get_activity_summary()
+        if activity_summary:
+            activity_box = draw.textbbox((0, 0), activity_summary, font=title_font)
+            activity_x = right - 22 - (activity_box[2] - activity_box[0])
+            draw.text((activity_x, top + 18), activity_summary, fill=COLOR_TEXT_SUBTLE, font=title_font)
 
     def _render_final_image(self) -> bytes:
         """渲染最终图像。"""
