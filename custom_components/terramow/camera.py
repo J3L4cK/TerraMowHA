@@ -1750,7 +1750,15 @@ class TerraMowMapCamera(Camera):
 
         self._draw_map_chips(image, scene)
         self._draw_scale_bar(image, transformer)
-        compass_center = (MAP_RECT[2] - 22 - 22, MAP_RECT[1] + 22 + 22)
+        compass_half = 22
+        compass_gap = 16
+        compass_bounds_right, compass_bounds_top = (
+            (extent_rect[2], extent_rect[1]) if extent_rect is not None else (MAP_RECT[2] - 4, MAP_RECT[1] + 4)
+        )
+        compass_center = (
+            compass_bounds_right - compass_gap - compass_half,
+            compass_bounds_top + compass_gap + compass_half,
+        )
         self._draw_orientation_compass(image, compass_center, scene.get("rotation_deg", 0.0))
         self._draw_legend(image, scene, extent_rect)
 
