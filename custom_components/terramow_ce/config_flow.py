@@ -87,6 +87,54 @@ class ConfigFlow(BaseConfigFlow, domain=DOMAIN):
             errors=errors
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        """Handle reconfiguration of an existing entry.
+
+        Lets the user update host/password (e.g. after a DHCP IP change,
+        or a rotated MQTT password) from Settings > Devices & Services >
+        Reconfigure, instead of having to delete and re-add the
+        integration from scratch.
+        """
+        errors: dict[str, str] = {}
+        reconfigure_entry = self._get_reconfigure_entry()
+
+        if user_input is not None:
+            try:
+                info = await validate_input(self.hass, user_input)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            except Exception:
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            else:
+                # unique_id 与 host 绑定；这里允许 host 真的发生变化（例如
+                # 割草机换了 IP），只需确保没有和另一个已存在的条目冲突。
+                await self.async_set_unique_id(user_input[CONF_HOST])
+                self._abort_if_unique_id_configured()
+                return self.async_update_reload_and_abort(
+                    reconfigure_entry,
+                    title=info["title"],
+                    data=user_input,
+                )
+
+        current_data = reconfigure_entry.data
+        data_schema = vol.Schema(
+            {
+                vol.Required(CONF_HOST, default=current_data.get(CONF_HOST, "")): str,
+                vol.Required(CONF_PASSWORD, default=current_data.get(CONF_PASSWORD, "")): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=data_schema,
+            errors=errors,
+        )
+
 
 class CannotConnect(HomeAssistantError):
     """Error to indicate we cannot connect."""

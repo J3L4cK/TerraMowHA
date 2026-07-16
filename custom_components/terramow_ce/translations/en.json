@@ -1,7 +1,8 @@
 {
     "config": {
         "abort": {
-            "already_configured": "Device is already configured"
+            "already_configured": "Device is already configured",
+            "reconfigure_successful": "Re-configuration was successful"
         },
         "error": {
             "cannot_connect": "Failed to connect",
@@ -14,6 +15,12 @@
                     "host": "Host",
                     "password": "Password",
                     "username": "Username"
+                }
+            },
+            "reconfigure": {
+                "data": {
+                    "host": "Host",
+                    "password": "Password"
                 }
             }
         }
