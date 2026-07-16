@@ -2474,9 +2474,24 @@ class TerraMowMapCamera(Camera):
             box = draw.textbbox((0, 0), label, font=font)
             widths.append(box[2] - box[0])
 
-        total_width = sum(widths) + len(items) * (dot_r * 2 + dot_text_gap) + (len(items) - 1) * item_gap
-        x = MAP_RECT[2] - 22 - total_width
-        y = MAP_RECT[3] - 24
+        row_width = sum(widths) + len(items) * (dot_r * 2 + dot_text_gap) + (len(items) - 1) * item_gap
+        pad_x = 12
+        pad_y = 8
+        pill_width = row_width + pad_x * 2
+        pill_height = 16 + pad_y * 2
+        pill_left = MAP_RECT[2] - 26 - pill_width
+        pill_top = MAP_RECT[3] - 26 - pill_height
+
+        self._draw_card_shape(
+            image,
+            (pill_left, pill_top, pill_left + pill_width, pill_top + pill_height),
+            pill_height // 2,
+            (255, 255, 255, 235),
+            COLOR_CARD_BORDER,
+        )
+
+        x = pill_left + pad_x
+        y = pill_top + pill_height // 2
 
         for (label, color), text_width in zip(items, widths):
             draw.ellipse([x, y - dot_r, x + dot_r * 2, y + dot_r], fill=color)
