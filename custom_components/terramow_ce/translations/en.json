@@ -189,6 +189,11 @@
             "multiple_direction_angle2": {
                 "name": "Second Direction Angle"
             }
+        },
+        "update": {
+            "firmware_compatibility": {
+                "name": "Firmware Compatibility"
+            }
         }
     },
     "state": {
