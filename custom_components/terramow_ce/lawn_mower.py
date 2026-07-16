@@ -18,6 +18,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from . import TerraMowBasicData
 from homeassistant.config_entries import ConfigEntry
+from .repairs import async_update_compatibility_issue, async_clear_compatibility_issue
 from .const import (
     MQTT_PORT,
     MQTT_USERNAME,
@@ -604,6 +605,9 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
                 _LOGGER.info("Version compatibility check: %s", message)
             else:
                 _LOGGER.warning("Version compatibility check: %s", message)
+
+            # 同步到 Repairs：不兼容时创建/更新问题，恢复兼容时自动清除。
+            async_update_compatibility_issue(self.hass, self.host, compatibility_status, message)
 
             # 如果版本不兼容，可以考虑禁用某些功能或显示警告
             if compatibility_status == CompatibilityStatus.INCOMPATIBLE:
@@ -1446,6 +1450,7 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
         self._reset_history_path_retry()
         self._reset_pending_meta()
         self._mqtt_connected = False
+        async_clear_compatibility_issue(self.hass, self.host)
         if self.mqtt_client:
             # disconnect() 让 loop_forever() 返回，工作线程才能看到 stop 事件并退出。
             self.mqtt_client.disconnect()

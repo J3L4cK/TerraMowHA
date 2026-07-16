@@ -206,5 +206,19 @@
         "changing_mode": "Changing Mode",
         "active": "Active",
         "pending": "Pending Confirmation"
+    },
+    "issues": {
+        "firmware_upgrade_required": {
+            "title": "TerraMow firmware update required",
+            "description": "{message}\n\nDevice: {host}\n\nUpdate the TerraMow firmware through the TerraMow app. This issue clears automatically once the firmware reports a compatible version."
+        },
+        "plugin_downgrade_recommended": {
+            "title": "TerraMow CE update recommended",
+            "description": "{message}\n\nDevice: {host}\n\nUpdate the TerraMow CE integration (or install a matching version) to fully support this firmware."
+        },
+        "firmware_incompatible": {
+            "title": "TerraMow firmware incompatible",
+            "description": "{message}\n\nDevice: {host}\n\nThe reported firmware version could not be matched to a known compatibility state. Check the firmware version in the TerraMow app and the integration version."
+        }
     }
 }
