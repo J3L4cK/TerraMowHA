@@ -9,6 +9,7 @@ import io
 import json
 import logging
 import math
+import os
 import time
 from functools import lru_cache
 from typing import Any
@@ -162,10 +163,22 @@ HANDLED_MAP_FIELDS = {
 HANDLED_PATH_FIELDS = {"id", "map_id", "type", "points"}
 
 
+_BUNDLED_FONTS_DIR = os.path.join(os.path.dirname(__file__), "fonts")
+
+
 @lru_cache(maxsize=32)
 def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """加载字体。"""
+    """加载字体。
+
+    优先使用随集成一起分发的字体文件，避免依赖宿主系统是否安装了字体
+    （很多 Home Assistant 安装环境不带任何 TrueType 字体，此前会静默
+    退化为 Pillow 的固定尺寸位图字体，导致所有文字看起来极小）。
+    """
     candidates = [
+        (
+            os.path.join(_BUNDLED_FONTS_DIR, "DejaVuSans.ttf"),
+            os.path.join(_BUNDLED_FONTS_DIR, "DejaVuSans-Bold.ttf"),
+        ),
         (
             "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
             "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
@@ -185,7 +198,12 @@ def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageF
             return ImageFont.truetype(font_path, size=size)
         except (OSError, IOError):
             continue
-    return ImageFont.load_default()
+    try:
+        # Pillow >= 10.1 支持可缩放的内置默认字体；旧版本会忽略 size 参数
+        # 并回退为固定尺寸位图字体（仍优于崩溃）。
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
 
 
 class CoordinateTransformer:
