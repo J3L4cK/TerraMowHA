@@ -2616,7 +2616,8 @@ class TerraMowMapCamera(Camera):
         if activity_summary:
             activity_box = draw.textbbox((0, 0), activity_summary, font=title_font)
             activity_x = right - 22 - (activity_box[2] - activity_box[0])
-            draw.text((activity_x, top + 18), activity_summary, fill=COLOR_TEXT_SUBTLE, font=title_font)
+            activity_y = chip_y + (28 - (activity_box[3] - activity_box[1])) / 2 - activity_box[1]
+            draw.text((activity_x, activity_y), activity_summary, fill=COLOR_TEXT_SUBTLE, font=title_font)
 
     def _render_final_image(self) -> bytes:
         """渲染最终图像。"""
