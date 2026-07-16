@@ -1528,6 +1528,7 @@ class TerraMowMapCamera(Camera):
         radius: int,
         fill: tuple[int, int, int, int],
         outline: tuple[int, int, int, int],
+        outline_width: int = 1,
     ) -> None:
         """局部超采样绘制卡片主体，得到平滑抗锯齿的圆角边缘。"""
         x0, y0, x1, y1 = (int(v) for v in rect)
@@ -1541,7 +1542,7 @@ class TerraMowMapCamera(Camera):
                 radius=radius * s,
                 fill=fill,
                 outline=outline,
-                width=max(1, s),
+                width=max(1, outline_width * s),
             )
 
         self._supersample_and_composite(image, (x0, y0), (width, height), scale, render)
@@ -1778,7 +1779,7 @@ class TerraMowMapCamera(Camera):
             compass_bounds_top + compass_gap + compass_half,
         )
         self._draw_orientation_compass(image, compass_center, scene.get("rotation_deg", 0.0))
-        self._draw_legend(image, scene, extent_rect)
+        self._draw_legend(image, scene)
 
     def _composite_draw(
         self,
@@ -2485,9 +2486,8 @@ class TerraMowMapCamera(Camera):
         self,
         image: Image.Image,
         scene: dict[str, Any],
-        extent_rect: tuple[int, int, int, int] | None = None,
     ) -> None:
-        """在地图范围（灰色底图矩形）右下角绘制颜色图例，只展示场景中实际存在的分类。"""
+        """在地图卡片（外层白色圆角卡片）右下角绘制颜色图例，只展示场景中实际存在的分类。"""
         selected_count = sum(
             1 for region in scene["regions"] for sub_region in region["sub_regions"] if sub_region["selected"]
         )
@@ -2523,10 +2523,8 @@ class TerraMowMapCamera(Camera):
         pill_width = row_width + pad_x * 2
         pill_height = 16 + pad_y * 2
 
-        # 以灰色底图矩形（地图范围）为基准，右侧和底部使用相同的间距
-        bounds_right, bounds_bottom = (
-            (extent_rect[2], extent_rect[3]) if extent_rect is not None else (MAP_RECT[2] - 4, MAP_RECT[3] - 4)
-        )
+        # 以外层地图卡片本身（而非灰色地图范围）为基准，右侧和底部使用相同的间距
+        bounds_right, bounds_bottom = (MAP_RECT[2] - 4, MAP_RECT[3] - 4)
         gap = 16
         pill_left = bounds_right - gap - pill_width
         pill_top = bounds_bottom - gap - pill_height
@@ -2537,6 +2535,7 @@ class TerraMowMapCamera(Camera):
             pill_height // 2,
             (255, 255, 255, 235),
             COLOR_CARD_BORDER,
+            outline_width=2,
         )
 
         x = pill_left + pad_x
