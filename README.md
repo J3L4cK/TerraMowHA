@@ -57,4 +57,10 @@ Open an issue on [GitHub](https://github.com/TerraMow/TerraMowHA/issues) for sup
 
 ### Developer Information
 
-For develope
+For developers interested in understanding or extending this integration, please refer to the [Developer Guide](docs/en/developers.md).
+
+---
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.

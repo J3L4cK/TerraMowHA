@@ -57,4 +57,4 @@ echo ""
 echo "使用方法:"
 echo "1. 启动 Home Assistant: cd $HA_CORE_PATH && source venv/bin/activate && python -m homeassistant --config config"
 echo "2. 或在 VS Code 中使用调试配置启动"
-echo "3. 运行测试: pytest tests/components/terramo
+echo "3. 运行测试: pytest tests/components/terramow_ce/ -v"
