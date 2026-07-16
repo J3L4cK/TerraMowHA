@@ -96,6 +96,9 @@ COLOR_STATION_CONTACT = (200, 205, 210, 255)
 COLOR_STATION_LED = (46, 204, 113, 255)
 
 COLOR_BADGE_RED = (169, 37, 43, 255)
+# 割草顺序徽标：曾复用 COLOR_BADGE_RED，但现在 No-go 区域也是红色，容易被误读为“禁区”。
+# 顺序徽标只出现在绿色的“已选中”子区域上，改用深绿色与该配色语言保持一致。
+COLOR_BADGE_ORDER = (21, 128, 61, 255)
 COLOR_BADGE_BLUE = (68, 117, 235, 255)
 COLOR_BADGE_ORANGE = (255, 120, 70, 255)
 COLOR_BADGE_GRAY = (108, 114, 124, 255)
@@ -2031,7 +2034,7 @@ class TerraMowMapCamera(Camera):
         def render(draw: ImageDraw.ImageDraw, s: int) -> None:
             draw.ellipse(
                 [0, 0, diameter * s - 1, diameter * s - 1],
-                fill=COLOR_BADGE_RED,
+                fill=COLOR_BADGE_ORDER,
                 outline=COLOR_TEXT_WHITE,
                 width=max(1, 2 * s),
             )
