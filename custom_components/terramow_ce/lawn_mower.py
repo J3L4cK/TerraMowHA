@@ -227,6 +227,11 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
         self.power_mode: PowerMode | None = None
         self.back_to_station_reason = BackToStationReason.BACK_TO_STATION_REASON_NONE
         self._mqtt_connected: bool = False  # 是否已连接到割草机的 MQTT Broker
+        # dp_107 里另外四个一直被解析出来又直接丢弃、从未赋值给任何地方的字段。
+        self.is_robot_navi_located: bool | None = None
+        self.is_upgrading: bool = False
+        self.is_saving_data: bool = False
+        self.is_data_conversion_in_progress: bool = False
 
         self.cmd_seq = random.randint(0, 0xFFFFFFFF)  # 生成随机的指令序号
 
@@ -309,6 +314,10 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
             "back_to_station_reason": self.back_to_station_reason.value if self.back_to_station_reason else None,
             "fault_reason": self.fault_reason,
             "mqtt_connected": self.mqtt_connected,
+            "is_robot_navi_located": self.is_robot_navi_located,
+            "is_upgrading": self.is_upgrading,
+            "is_saving_data": self.is_saving_data,
+            "is_data_conversion_in_progress": self.is_data_conversion_in_progress,
         }
 
     def _can_accept_command(self):
@@ -580,6 +589,12 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
         self.has_error = data.get("has_error", self.has_error)
         self.power_mode = data.get("power_mode", self.power_mode)
         self.back_to_station_reason = data.get("back_to_station_reason", self.back_to_station_reason)
+        self.is_robot_navi_located = data.get("is_robot_navi_located", self.is_robot_navi_located)
+        self.is_upgrading = data.get("is_upgrading", self.is_upgrading)
+        self.is_saving_data = data.get("is_saving_data", self.is_saving_data)
+        self.is_data_conversion_in_progress = data.get(
+            "is_data_conversion_in_progress", self.is_data_conversion_in_progress
+        )
 
         _LOGGER.debug("Mission state updated: mission=%s->%s, sub_mission=%s->%s, state=%s->%s, error=%s->%s",
                      old_mission, self.mission, old_sub_mission, self.sub_mission,
