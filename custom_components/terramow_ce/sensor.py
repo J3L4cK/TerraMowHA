@@ -911,6 +911,7 @@ async def async_setup_entry(
         # 全局参数显示传感器 (dp_155)
         TerraMowMowHeightSensor(basic_data, hass),
         TerraMowMowSpeedSensor(basic_data, hass),
+        CurrentMowSpacingSensor(basic_data, hass),
         
         # 统计和会话传感器
         TotalMowingTimeSensor(basic_data, hass),
@@ -1238,3 +1239,57 @@ class TotalMowingSessionsSensor(SensorEntity):
             return None
 
         return statistics_data.get('clean_times')
+
+
+class CurrentMowSpacingSensor(SensorEntity):
+    """Actual current mow spacing as reported by the robot (dp_155's
+    current_mow_spacing), distinct from the target spacing the
+    MowingSpacingNumber entity sets. Per TerraMow's docs this field is
+    only included when the payload is uploaded by the robot itself, so
+    it lags the setpoint until the robot confirms the change.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:ruler"
+    _attr_native_unit_of_measurement = UnitOfLength.MILLIMETERS
+    _attr_device_class = SensorDeviceClass.DISTANCE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "current_mow_spacing"
+
+    def __init__(
+        self,
+        basic_data: TerraMowBasicData,
+        hass: HomeAssistant,
+    ) -> None:
+        super().__init__()
+        self.basic_data = basic_data
+        self.host = basic_data.host
+        self.hass = hass
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={('TerraMowLawnMower', self.basic_data.host)},
+            name='TerraMow',
+            manufacturer='TerraMow',
+            model=self.basic_data.lawn_mower.device_model
+        )
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for this entity."""
+        return f"lawn_mower.terramow@{self.host}.current_mow_spacing"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the state of the sensor."""
+        if not hasattr(self.basic_data, 'lawn_mower') or not self.basic_data.lawn_mower:
+            return None
+
+        global_params = self.basic_data.lawn_mower.global_params
+        if not global_params:
+            return None
+
+        return global_params.get('current_mow_spacing')

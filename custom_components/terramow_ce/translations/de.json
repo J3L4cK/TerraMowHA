@@ -72,6 +72,9 @@
                     "MOW_SPEED_TYPE_AUTO": "Automatik"
                 }
             },
+            "current_mow_spacing": {
+                "name": "Aktueller Mähabstand"
+            },
             "clean_mode": {
                 "name": "Betriebsmodus",
                 "state": {
