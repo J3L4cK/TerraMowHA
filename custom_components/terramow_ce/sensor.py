@@ -135,6 +135,10 @@ class TotalMowingTimeSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:clock"
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    # 设备原始上报的是秒，长期累计后数字会非常大（几十万秒），因此建议前端按小时展示；
+    # native_value 仍然保持秒不变，方便长期统计换算的精度不受影响。
+    _attr_suggested_unit_of_measurement = UnitOfTime.HOURS
+    _attr_suggested_display_precision = 1
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -260,6 +264,9 @@ class CurrentSessionTimeSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:timer"
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    # 同样建议以分钟展示，单次作业通常几十分钟到几小时，比原始秒数更容易读
+    _attr_suggested_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_suggested_display_precision = 0
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
