@@ -917,11 +917,15 @@ class TerraMowMapCamera(Camera):
 
     @property
     def device_info(self) -> DeviceInfo:
+        # 地图相关的实体（这个 camera + switch.py 里的 Show Obstacles 开关）挂在一个
+        # 单独的 "TerraMow Map" 子设备下（通过 via_device 关联回主设备），
+        # 这样地图渲染相关的设置不会和割草机本身的传感器/开关混在一起。
         return DeviceInfo(
-            identifiers={("TerraMowLawnMower", self.basic_data.host)},
-            name="TerraMow",
+            identifiers={("TerraMowLawnMower", f"{self.basic_data.host}_map")},
+            name="TerraMow Map",
             manufacturer="TerraMow",
             model=self.basic_data.lawn_mower.device_model,
+            via_device=("TerraMowLawnMower", self.basic_data.host),
         )
 
     @property

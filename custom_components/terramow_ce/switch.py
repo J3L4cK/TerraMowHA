@@ -52,11 +52,15 @@ class TerraMowShowObstaclesSwitch(SwitchEntity, RestoreEntity):
 
     @property
     def device_info(self) -> DeviceInfo:
+        # 挂在和 camera.py 的地图相机相同的 "TerraMow Map" 子设备下，而不是主设备，
+        # 这样这个纯本地渲染开关不会和割草机本身的传感器/配置混在一起，
+        # 也让它更清楚地表明自己控制的是地图上的显示，而不是割草机的实际行为。
         return DeviceInfo(
-            identifiers={("TerraMowLawnMower", self.basic_data.host)},
-            name="TerraMow",
+            identifiers={("TerraMowLawnMower", f"{self.basic_data.host}_map")},
+            name="TerraMow Map",
             manufacturer="TerraMow",
             model=self.basic_data.lawn_mower.device_model,
+            via_device=("TerraMowLawnMower", self.basic_data.host),
         )
 
     @property
