@@ -1530,7 +1530,7 @@ class TerraMowMapCamera(Camera):
         if scene["all_points"]:
             self._transformer = CoordinateTransformer(
                 scene["all_points"],
-                MAP_RECT,
+                self._get_map_rect(),
                 padding=MAP_PADDING,
             )
             self._draw_scene(image, scene)
@@ -1598,13 +1598,28 @@ class TerraMowMapCamera(Camera):
 
         self._supersample_and_composite(image, (x0, y0), (width, height), scale, render)
 
+    def _get_map_rect(self) -> tuple[int, int, int, int]:
+        """地图卡片实际占用的区域。
+
+        关闭 "Show Info Panel" 时，下方摘要卡片（SUMMARY_RECT）不再绘制，
+        这段空间会并入地图卡片，避免留下一块空的、没有意义的卡片区域。
+        """
+        if getattr(self.basic_data, "show_info_panel", True):
+            return MAP_RECT
+        return (MAP_RECT[0], MAP_RECT[1], MAP_RECT[2], SUMMARY_RECT[3])
+
     def _draw_background(self, image: Image.Image) -> None:
         """绘制画布底色和卡片。"""
-        self._draw_soft_shadow(image, MAP_RECT, MAP_RADIUS)
-        self._draw_soft_shadow(image, SUMMARY_RECT, CARD_RADIUS)
+        map_rect = self._get_map_rect()
+        show_info_panel = getattr(self.basic_data, "show_info_panel", True)
 
-        self._draw_card_shape(image, MAP_RECT, MAP_RADIUS, COLOR_MAP_BG, COLOR_CARD_BORDER)
-        self._draw_card_shape(image, SUMMARY_RECT, CARD_RADIUS, COLOR_CARD_BG, COLOR_CARD_BORDER)
+        self._draw_soft_shadow(image, map_rect, MAP_RADIUS)
+        if show_info_panel:
+            self._draw_soft_shadow(image, SUMMARY_RECT, CARD_RADIUS)
+
+        self._draw_card_shape(image, map_rect, MAP_RADIUS, COLOR_MAP_BG, COLOR_CARD_BORDER)
+        if show_info_panel:
+            self._draw_card_shape(image, SUMMARY_RECT, CARD_RADIUS, COLOR_CARD_BG, COLOR_CARD_BORDER)
 
     def _draw_empty_state_icon(self, image: Image.Image, center: tuple[int, int]) -> None:
         """绘制空状态占位图标（折叠地图造型）。"""
@@ -1649,8 +1664,9 @@ class TerraMowMapCamera(Camera):
         subtitle = "Map metadata received, but no spatial data to draw yet"
         title_box = draw.textbbox((0, 0), title, font=title_font)
         body_box = draw.textbbox((0, 0), subtitle, font=body_font)
-        center_x = (MAP_RECT[0] + MAP_RECT[2]) / 2
-        center_y = (MAP_RECT[1] + MAP_RECT[3]) / 2
+        map_rect = self._get_map_rect()
+        center_x = (map_rect[0] + map_rect[2]) / 2
+        center_y = (map_rect[1] + map_rect[3]) / 2
         self._draw_empty_state_icon(image, (int(center_x), int(center_y) - 82))
         draw.text(
             (center_x - (title_box[2] - title_box[0]) / 2, center_y - 24),
@@ -1837,10 +1853,11 @@ class TerraMowMapCamera(Camera):
             self._draw_scale_bar(image, transformer, extent_rect)
 
         if getattr(self.basic_data, "show_compass", True):
+            map_rect = self._get_map_rect()
             compass_half = 22
             compass_gap = 16
             compass_bounds_right, compass_bounds_top = (
-                (extent_rect[2], extent_rect[1]) if extent_rect is not None else (MAP_RECT[2] - 4, MAP_RECT[1] + 4)
+                (extent_rect[2], extent_rect[1]) if extent_rect is not None else (map_rect[2] - 4, map_rect[1] + 4)
             )
             compass_center = (
                 compass_bounds_right - compass_gap - compass_half,
@@ -2212,8 +2229,9 @@ class TerraMowMapCamera(Camera):
         bar_y = text_h + gap  # 条形在图块内的局部 y 坐标，上方留出文字空间
         tile_height = bar_y + tick + 2
 
+        map_rect = self._get_map_rect()
         bounds_left, bounds_bottom = (
-            (extent_rect[0], extent_rect[3]) if extent_rect is not None else (MAP_RECT[0] + 22, MAP_RECT[3] - 4)
+            (extent_rect[0], extent_rect[3]) if extent_rect is not None else (map_rect[0] + 22, map_rect[3] - 4)
         )
         x0 = bounds_left
         y0 = bounds_bottom - 22 - tile_height + bar_y  # 使条形本身落在期望的 y0 位置
