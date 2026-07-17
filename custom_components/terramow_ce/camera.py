@@ -906,6 +906,15 @@ class TerraMowMapCamera(Camera):
             lawn_mower.register_callback(BATTERY_PERCENT_DP, self._on_battery_percent)
             lawn_mower.register_callback(CURRENT_WORK_DATA_DP, self._on_work_data)
 
+        # 让 switch.py 里的 "Show Obstacles" 开关能找到这个相机实例并触发刷新
+        basic_data.map_camera = self
+
+    async def async_refresh_after_settings_change(self) -> None:
+        """供本地渲染设置（比如障碍物显示开关）变化后调用，重建静态图层并刷新状态。"""
+        await self.hass.async_add_executor_job(self._rebuild_static_image)
+        self._cached_png = None
+        self.async_write_ha_state()
+
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
@@ -1755,21 +1764,24 @@ class TerraMowMapCamera(Camera):
             )
             self._apply_hatch(image, transformer.to_pixels(polygon), COLOR_HATCH, spacing=12)
 
-        for polygon in scene["obstacles"]:
-            self._draw_polygon(
-                image,
-                draw,
-                transformer,
-                polygon,
-                COLOR_OBSTACLE_FILL,
-                COLOR_OBSTACLE_OUTLINE,
-                2,
-            )
-            if len(polygon) >= 3:
-                self._apply_hatch(image, transformer.to_pixels(polygon), COLOR_OBSTACLE_HATCH, spacing=9)
-            centroid = _polygon_centroid(polygon)
-            if centroid is not None:
-                self._draw_obstacle_glyph(image, transformer.to_pixel(centroid[0], centroid[1]))
+        # 障碍物是否绘制由 "Show Obstacles" 开关控制（只影响绘制，不影响坐标范围计算，
+        # 这样切换开关不会导致地图整体缩放/平移跳动）。
+        if getattr(self.basic_data, "show_obstacles", True):
+            for polygon in scene["obstacles"]:
+                self._draw_polygon(
+                    image,
+                    draw,
+                    transformer,
+                    polygon,
+                    COLOR_OBSTACLE_FILL,
+                    COLOR_OBSTACLE_OUTLINE,
+                    2,
+                )
+                if len(polygon) >= 3:
+                    self._apply_hatch(image, transformer.to_pixels(polygon), COLOR_OBSTACLE_HATCH, spacing=9)
+                centroid = _polygon_centroid(polygon)
+                if centroid is not None:
+                    self._draw_obstacle_glyph(image, transformer.to_pixel(centroid[0], centroid[1]))
 
         for polygon in scene["draw_region_polygons"]:
             pixels = transformer.to_pixels(polygon)

@@ -24,7 +24,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.LAWN_MOWER, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SELECT, Platform.NUMBER, Platform.CAMERA, Platform.UPDATE]
+PLATFORMS: list[Platform] = [Platform.LAWN_MOWER, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SELECT, Platform.NUMBER, Platform.CAMERA, Platform.UPDATE, Platform.SWITCH]
 
 @dataclass
 class TerraMowBasicData:
@@ -34,6 +34,11 @@ class TerraMowBasicData:
     compatibility_status: str = CompatibilityStatus.COMPATIBLE
     firmware_version: Optional[dict] = None
     compatibility_reason: str = ""  # Store the specific reason for compatibility check failure
+    # 本地渲染偏好（不来自设备/MQTT，只影响 camera.py 怎么画地图）：是否在地图上绘制障碍物。
+    # switch.py 里的开关实体读写这个值；camera.py 引用同一个 basic_data 实例读取它。
+    show_obstacles: bool = True
+    # switch 切换后用来找到相机实体触发重绘，由 camera.py 在初始化时设置。
+    map_camera: Any = None
     
     def check_version_compatibility(self, compatibility_info: dict) -> str:
         """Check version compatibility and return status."""

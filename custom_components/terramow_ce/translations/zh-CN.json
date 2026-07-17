@@ -169,6 +169,11 @@
             "multiple_direction_angle2": {
                 "name": "第二主方向角度"
             }
+        },
+        "switch": {
+            "show_obstacles": {
+                "name": "显示障碍物"
+            }
         }
     },
     "state": {

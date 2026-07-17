@@ -204,6 +204,11 @@
             "firmware_compatibility": {
                 "name": "Firmware-Kompatibilität"
             }
+        },
+        "switch": {
+            "show_obstacles": {
+                "name": "Hindernisse anzeigen"
+            }
         }
     },
     "state": {
