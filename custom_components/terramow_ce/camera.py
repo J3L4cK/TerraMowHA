@@ -2083,21 +2083,24 @@ class TerraMowMapCamera(Camera):
         self._supersample_and_composite(image, (x - half, y - half), (diameter, diameter), self._CHIP_SUPERSAMPLE, render)
 
     def _draw_obstacle_glyph(self, image: Image.Image, center: tuple[int, int]) -> None:
-        """在障碍物中心绘制一个小型岩石状图标，替代单调的灰色色块。"""
+        """在障碍物中心绘制一个小型岩石状图标，替代单调的灰色色块。
+        真实花园里小障碍物经常彼此靠得很近（几十个障碍物很常见），之前用的 18px
+        尺寸很容易让相邻障碍物的图标整片糊在一起变成一堆看不清数量和位置的圆点，
+        所以缩小到 11px，减少重叠概率，同时仍能在地图上看清每个障碍物的大致位置。"""
         x, y = center
-        size = 18
+        size = 11
         half = size // 2
 
         def render(draw: ImageDraw.ImageDraw, s: int) -> None:
             c = half * s
             draw.ellipse(
-                [c - 8 * s, c - 6 * s, c + 5 * s, c + 7 * s],
+                [c - 5 * s, c - 4 * s, c + 3 * s, c + 5 * s],
                 fill=COLOR_OBSTACLE_OUTLINE,
                 outline=COLOR_TEXT_WHITE,
                 width=max(1, s),
             )
             draw.ellipse(
-                [c - 3 * s, c - 8 * s, c + 8 * s, c + 4 * s],
+                [c - 2 * s, c - 5 * s, c + 5 * s, c + 3 * s],
                 fill=COLOR_OBSTACLE_OUTLINE,
                 outline=COLOR_TEXT_WHITE,
                 width=max(1, s),
