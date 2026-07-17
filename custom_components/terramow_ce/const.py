@@ -65,3 +65,8 @@ MIN_MOW_SPEED_VERSION_FOR_AUTO = 3
 
 # dp_155 刀盘转速默认值（与固件实际初始化路径一致）
 DEFAULT_BLADE_DISK_SPEED_TYPE = "BLADE_DISK_SPEED_TYPE_MEDIUM"
+
+# Options flow 存储的分区自定义命名映射的 key（entry.options[CONF_ZONE_NAMES]）。
+# 结构: {str(zone_id): "用户自定义名称"}。设备本身可能不为 sub_region 提供名称，
+# 这个映射让用户可以在 HA 里为分区起名，而不依赖设备/App 是否提供了 name 字段。
+CONF_ZONE_NAMES = "zone_names"

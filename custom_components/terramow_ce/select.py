@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 
 from . import TerraMowBasicData, DOMAIN
 from .const import (
+    CONF_ZONE_NAMES,
     DEFAULT_BLADE_DISK_SPEED_TYPE,
     MIN_MOW_SPEED_VERSION_FOR_AUTO,
     MOW_SPEED_TYPE_ADAPTIVE_HIGH,
@@ -32,7 +33,7 @@ async def async_setup_entry(
     
     # 创建选择实体
     entities = [
-        TerraMowZoneSelect(basic_data, hass),
+        TerraMowZoneSelect(basic_data, hass, config_entry),
         MowSpeedSelect(basic_data, hass),
         BladeSpeedSelect(basic_data, hass),
         MainDirectionModeSelect(basic_data, hass),
@@ -57,18 +58,24 @@ class TerraMowZoneSelect(SelectEntity):
         self,
         basic_data: TerraMowBasicData,
         hass: HomeAssistant,
+        config_entry: ConfigEntry,
     ) -> None:
         super().__init__()
         self.basic_data = basic_data
         self.host = basic_data.host
         self.hass = hass
+        self.config_entry = config_entry
         self._map_info: dict[str, Any] = {}
         self._current_option: str | None = None
         self._options = ["no_zones_available"]
-        
+
         # 注册地图信息回调
         if hasattr(basic_data, 'lawn_mower') and basic_data.lawn_mower:
             basic_data.lawn_mower.register_map_callback(self._on_map_info)
+
+    def _get_zone_name_overrides(self) -> dict[str, str]:
+        """读取用户在 Options Flow 里为分区设置的自定义名称（zone_id -> name）。"""
+        return dict(self.config_entry.options.get(CONF_ZONE_NAMES, {}))
     
     @property
     def device_info(self) -> DeviceInfo:
@@ -166,6 +173,7 @@ class TerraMowZoneSelect(SelectEntity):
 
         # 构建分区选项列表 - 只添加子分区
         options = ["all_zones"]  # 添加全部分区选项
+        zone_name_overrides = self._get_zone_name_overrides()
 
         for region in regions:
             # 只处理子分区（设备协议使用sub_regions字段名）
@@ -174,8 +182,12 @@ class TerraMowZoneSelect(SelectEntity):
             for sub_zone in sub_regions:
                 sub_zone_id = sub_zone.get('id')
                 sub_zone_name = sub_zone.get('name')
+                override_name = zone_name_overrides.get(str(sub_zone_id))
 
-                if sub_zone_name and sub_zone_name.strip():
+                if override_name and override_name.strip():
+                    # 用户在 Options Flow 里为这个 zone id 起的名字，优先级最高
+                    display_name = override_name
+                elif sub_zone_name and sub_zone_name.strip():
                     # 子分区自带名称（较少见，但优先使用）
                     display_name = sub_zone_name
                 elif region_name and region_name.strip():
@@ -205,15 +217,19 @@ class TerraMowZoneSelect(SelectEntity):
         regions = self._map_info.get('regions', [])  # 设备协议字段名，保持不变
 
         # 统计所有子分区
+        zone_name_overrides = self._get_zone_name_overrides()
         all_sub_zones = []
         for region in regions:
             sub_regions = region.get('sub_regions', [])  # 设备协议字段名，保持不变
             for sub_zone in sub_regions:
+                sub_zone_id = sub_zone.get('id')
                 sub_zone_info = {
-                    'id': sub_zone.get('id'),
+                    'id': sub_zone_id,
                     'name': sub_zone.get('name', ''),
                     'parent_region_id': region.get('id'),  # 设备协议字段名，保持不变
-                    'parent_region_name': region.get('name', '')
+                    'parent_region_name': region.get('name', ''),
+                    # 实际会展示在下拉选项里的名字：自定义覆盖 > 设备名 > 父分区名 > 兜底占位符。
+                    'custom_name': zone_name_overrides.get(str(sub_zone_id), ''),
                 }
                 all_sub_zones.append(sub_zone_info)
 

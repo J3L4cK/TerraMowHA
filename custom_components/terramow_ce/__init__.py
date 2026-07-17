@@ -145,7 +145,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # 分区自定义命名等选项在 Options Flow 里保存后，重新加载整个 entry，
+    # 这样 select.py 等实体能立刻用上新的 entry.options，而不需要用户手动重启 HA。
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
     return True
+
+
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Options 变更后重新加载 entry。"""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

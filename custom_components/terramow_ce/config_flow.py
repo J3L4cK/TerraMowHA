@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 import paho.mqtt.client as mqtt_client
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow as BaseConfigFlow
+from homeassistant.config_entries import ConfigFlow as BaseConfigFlow, OptionsFlow
 # 移除 ConfigFlowResult 导入
 from homeassistant.const import CONF_HOST, CONF_PASSWORD
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import MQTT_PORT, MQTT_USERNAME, DOMAIN
+from .const import MQTT_PORT, MQTT_USERNAME, DOMAIN, CONF_ZONE_NAMES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -134,6 +135,112 @@ class ConfigFlow(BaseConfigFlow, domain=DOMAIN):
             data_schema=data_schema,
             errors=errors,
         )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry) -> "TerraMowOptionsFlowHandler":
+        """入口：Settings > Devices & Services > TerraMow > Configure。"""
+        return TerraMowOptionsFlowHandler()
+
+
+class TerraMowOptionsFlowHandler(OptionsFlow):
+    """让用户为分区（sub_region）自定义显示名称。
+
+    设备/App 里的分区经常没有为 sub_region 单独起名（只有父 region 才有自定义名），
+    这会导致 select.terramow_..._region_select 的选项只能显示类似
+    "Sub-zone 3 (ID: 3)" 这种没有实际信息量的标签。这里允许用户直接在 HA 里
+    为每个已知的 zone id 指定一个名称，存进 entry.options[CONF_ZONE_NAMES]，
+    select.py 读取时优先使用这个覆盖值。
+    """
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        errors: dict[str, str] = {}
+        zones = self._get_known_zones()
+        existing_overrides: dict[str, str] = dict(
+            self.config_entry.options.get(CONF_ZONE_NAMES, {})
+        )
+
+        if user_input is not None:
+            if zones:
+                zone_names: dict[str, str] = {}
+                for zone_id, _current_name in zones:
+                    value = user_input.get(f"zone_name_{zone_id}", "")
+                    if value and value.strip():
+                        zone_names[str(zone_id)] = value.strip()
+                return self.async_create_entry(title="", data={CONF_ZONE_NAMES: zone_names})
+
+            # 地图/分区信息还不可用时的兜底方案：直接输入 JSON 映射。
+            raw = user_input.get("zone_names_json", "").strip()
+            zone_names = existing_overrides
+            if raw:
+                try:
+                    parsed = json.loads(raw)
+                    if not isinstance(parsed, dict):
+                        raise ValueError("zone_names_json must be a JSON object")
+                    zone_names = {
+                        str(zone_id): str(name).strip()
+                        for zone_id, name in parsed.items()
+                        if str(name).strip()
+                    }
+                except (ValueError, TypeError):
+                    errors["base"] = "invalid_zone_names_json"
+
+            if not errors:
+                return self.async_create_entry(title="", data={CONF_ZONE_NAMES: zone_names})
+
+        if zones:
+            schema_dict: dict[Any, Any] = {}
+            zone_list_lines = [
+                f"#{zone_id}: {current_name}" for zone_id, current_name in zones
+            ]
+            for zone_id, _current_name in zones:
+                default = existing_overrides.get(str(zone_id), "")
+                schema_dict[vol.Optional(f"zone_name_{zone_id}", default=default)] = str
+
+            return self.async_show_form(
+                step_id="init",
+                data_schema=vol.Schema(schema_dict),
+                description_placeholders={"zone_list": "\n".join(zone_list_lines)},
+                errors=errors,
+            )
+
+        # 还没有可用的分区列表（地图尚未加载/设备没有分区）：退回到 JSON 输入兜底方案。
+        default_json = json.dumps(existing_overrides, ensure_ascii=False) if existing_overrides else ""
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional("zone_names_json", default=default_json): str,
+                }
+            ),
+            description_placeholders={
+                "zone_list": "(no zones detected yet — wait for the map to load, or enter a JSON mapping below)"
+            },
+            errors=errors,
+        )
+
+    def _get_known_zones(self) -> list[tuple[int, str]]:
+        """从已缓存的地图信息中枚举当前已知的 sub_region，返回 [(id, 当前展示名), ...]。"""
+        hass = self.hass
+        basic_data = hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        lawn_mower = getattr(basic_data, "lawn_mower", None) if basic_data else None
+        map_info = getattr(lawn_mower, "map_info", None) if lawn_mower else None
+        if not isinstance(map_info, dict) or not map_info:
+            return []
+
+        zones: list[tuple[int, str]] = []
+        for region in map_info.get("regions", []) or []:
+            region_name = (region.get("name") or "").strip()
+            for sub_zone in region.get("sub_regions", []) or []:
+                zone_id = sub_zone.get("id")
+                if zone_id is None:
+                    continue
+                sub_name = (sub_zone.get("name") or "").strip()
+                display = sub_name or region_name or f"Sub-zone {zone_id}"
+                zones.append((zone_id, display))
+        return zones
 
 
 class CannotConnect(HomeAssistantError):

@@ -25,6 +25,20 @@
             }
         }
     },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Zonennamen",
+                "description": "Weisen Sie jeder Zone (Unterbereich) einen eigenen Namen zu, damit die Zonenauswahl aussagekräftiger ist als die reine Zonen-ID. Lassen Sie ein Feld leer, um den vom Gerät gemeldeten Namen beizubehalten.\n\nBekannte Zonen:\n{zone_list}",
+                "data": {
+                    "zone_names_json": "Zonennamen (JSON, z. B. {\"1\": \"Vorgarten\", \"2\": \"Garten hinten\"})"
+                }
+            }
+        },
+        "error": {
+            "invalid_zone_names_json": "Konnte dies nicht als JSON-Objekt mit Zonen-ID zu Namen interpretieren, z. B. {\"1\": \"Vorgarten\"}"
+        }
+    },
     "entity": {
         "lawn_mower": {
             "lawn_mower": {
@@ -140,6 +154,18 @@
             },
             "mqtt_connected": {
                 "name": "MQTT verbunden"
+            },
+            "navi_located": {
+                "name": "Navigation verloren"
+            },
+            "upgrading": {
+                "name": "Firmware-Update läuft"
+            },
+            "saving_data": {
+                "name": "Speichert Daten"
+            },
+            "data_conversion_in_progress": {
+                "name": "Datenkonvertierung läuft"
             }
         },
         "select": {

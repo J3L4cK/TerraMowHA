@@ -25,6 +25,20 @@
       "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Zone Names",
+        "description": "Assign a custom name to each zone (sub-region) so the Zone Select dropdown shows something more useful than the raw zone ID. Leave a field blank to keep using the device-reported name.\n\nKnown zones:\n{zone_list}",
+        "data": {
+          "zone_names_json": "Zone names (JSON, e.g. {\"1\": \"Front Yard\", \"2\": \"Back Yard\"})"
+        }
+      }
+    },
+    "error": {
+      "invalid_zone_names_json": "Could not parse that as a JSON object mapping zone IDs to names, e.g. {\"1\": \"Front Yard\"}"
+    }
+  },
   "entity": {
     "lawn_mower": {
       "lawn_mower": {
@@ -140,6 +154,18 @@
       },
       "mqtt_connected": {
         "name": "MQTT Connected"
+      },
+      "navi_located": {
+        "name": "Navigation Lost"
+      },
+      "upgrading": {
+        "name": "Upgrading Firmware"
+      },
+      "saving_data": {
+        "name": "Saving Data"
+      },
+      "data_conversion_in_progress": {
+        "name": "Data Conversion In Progress"
       }
     },
     "select": {

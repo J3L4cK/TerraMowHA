@@ -18,6 +18,20 @@
             }
         }
     },
+    "options": {
+        "step": {
+            "init": {
+                "title": "分区名称",
+                "description": "为每个分区（子区域）设置自定义名称，这样分区选择的下拉菜单会显示比原始分区ID更有用的信息。留空则继续使用设备上报的名称。\n\n已知分区：\n{zone_list}",
+                "data": {
+                    "zone_names_json": "分区名称（JSON格式，例如 {\"1\": \"前院\", \"2\": \"后院\"}）"
+                }
+            }
+        },
+        "error": {
+            "invalid_zone_names_json": "无法解析为JSON对象（分区ID到名称的映射），例如 {\"1\": \"前院\"}"
+        }
+    },
     "entity": {
         "lawn_mower": {
             "lawn_mower": {
