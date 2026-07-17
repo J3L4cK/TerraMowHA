@@ -1572,12 +1572,15 @@ class TerraMowMapCamera(Camera):
         fill: tuple[int, int, int, int],
         outline: tuple[int, int, int, int],
         outline_width: int = 1,
+        supersample: int = 2,
     ) -> None:
-        """局部超采样绘制卡片主体，得到平滑抗锯齿的圆角边缘。"""
+        """局部超采样绘制卡片主体，得到平滑抗锯齿的圆角边缘。
+        supersample 默认 2 倍，足够应付大尺寸卡片（外层地图卡片、摘要面板）且不会太费性能；
+        小尺寸卡片（如图例胶囊）圆角占比更大，边缘锯齿更明显，调用方可以传更高的倍率。"""
         x0, y0, x1, y1 = (int(v) for v in rect)
         width = x1 - x0
         height = y1 - y0
-        scale = 2
+        scale = supersample
 
         def render(draw: ImageDraw.ImageDraw, s: int) -> None:
             draw.rounded_rectangle(
@@ -2094,6 +2097,25 @@ class TerraMowMapCamera(Camera):
 
         self._supersample_and_composite(image, (x - half, y - half), (diameter, diameter), self._CHIP_SUPERSAMPLE, render)
 
+    def _draw_dot(
+        self,
+        image: Image.Image,
+        center: tuple[int, int],
+        radius: int,
+        color: tuple[int, int, int, int],
+    ) -> None:
+        """绘制抗锯齿的小圆点（图例色块、电量状态点等），避免直接在主图上画出锯齿边缘。"""
+        x, y = int(round(center[0])), int(round(center[1]))
+        size = radius * 2 + 2  # 留一点边距，避免抗锯齿边缘被裁掉
+        half = size // 2
+
+        def render(draw: ImageDraw.ImageDraw, s: int) -> None:
+            c = half * s
+            r = radius * s
+            draw.ellipse([c - r, c - r, c + r, c + r], fill=color)
+
+        self._supersample_and_composite(image, (x - half, y - half), (size, size), self._CHIP_SUPERSAMPLE, render)
+
     def _draw_obstacle_glyph(self, image: Image.Image, center: tuple[int, int]) -> None:
         """在障碍物中心绘制一个小型岩石状图标，替代单调的灰色色块。
         真实花园里小障碍物经常彼此靠得很近（几十个障碍物很常见），之前用的 18px
@@ -2593,13 +2615,14 @@ class TerraMowMapCamera(Camera):
             (255, 255, 255, 235),
             COLOR_CARD_BORDER,
             outline_width=2,
+            supersample=self._CHIP_SUPERSAMPLE,
         )
 
         x = pill_left + pad_x
         y = pill_top + pill_height // 2
 
         for (label, color), text_width in zip(items, widths):
-            draw.ellipse([x, y - dot_r, x + dot_r * 2, y + dot_r], fill=color)
+            self._draw_dot(image, (x + dot_r, y), dot_r, color)
             draw.text((x + dot_r * 2 + dot_text_gap, y - 8), label, fill=COLOR_TEXT_SUBTLE, font=font)
             x += dot_r * 2 + dot_text_gap + text_width + item_gap
 
@@ -2740,10 +2763,7 @@ class TerraMowMapCamera(Camera):
             if dot_color is not None:
                 dot_r = 4
                 dot_cy = y + 6
-                draw.ellipse(
-                    [x - dot_r, dot_cy - dot_r, x + dot_r, dot_cy + dot_r],
-                    fill=dot_color,
-                )
+                self._draw_dot(image, (x, dot_cy), dot_r, dot_color)
                 draw.text((x + dot_r * 2 + 4, y), label, fill=COLOR_TEXT_MUTED, font=label_font)
             else:
                 draw.text((x, y), label, fill=COLOR_TEXT_MUTED, font=label_font)
