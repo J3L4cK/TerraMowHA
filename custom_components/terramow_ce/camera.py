@@ -745,6 +745,21 @@ def _enum_label(value: Any) -> str:
     return text.replace("_", " ").title()
 
 
+def _format_map_state(value: Any) -> str:
+    """把 map_state 转成不容易和作业进度混淆的文案（明确带上 "Map"），与
+    map_status 传感器的 translations 保持一致，而不是用 _enum_label 简单去掉前缀。"""
+    mapping = {
+        "MAP_STATE_EMPTY": "No Map",
+        "MAP_STATE_INIT": "No Map",
+        "MAP_STATE_INCOMPLETE": "Map Incomplete",
+        "MAP_STATE_COMPLETE": "Map Complete",
+    }
+    if isinstance(value, str) and value in mapping:
+        return mapping[value]
+    label = _enum_label(value)
+    return label if label == "-" else f"Map {label}"
+
+
 def _truncate(text: str, max_length: int) -> str:
     """截断字符串。"""
     if len(text) <= max_length:
@@ -2477,7 +2492,7 @@ class TerraMowMapCamera(Camera):
     def _draw_map_chips(self, image: Image.Image, scene: dict[str, Any]) -> None:
         """绘制地图上方摘要标签。"""
         name = self._map_data.get("name") or f"Map #{self._map_data.get('id', '-')}"
-        state = _enum_label(self._map_data.get("map_state"))
+        state = _format_map_state(self._map_data.get("map_state"))
 
         left = MAP_RECT[0] + 18
         top = MAP_RECT[1] + 18
@@ -2637,7 +2652,6 @@ class TerraMowMapCamera(Camera):
         draw = ImageDraw.Draw(image, "RGBA")
         left, top, right, bottom = SUMMARY_RECT
         width = right - left
-        title_font = _load_font(15, bold=True)
         label_font = _load_font(13)
         value_font_large = _load_font(18, bold=True)
         value_font_small = _load_font(14, bold=True)
@@ -2661,31 +2675,35 @@ class TerraMowMapCamera(Camera):
         if self._map_data.get("has_backup") or backup_info:
             backup_text = f"{len(backup_info) if isinstance(backup_info, list) else 0} item"
         status_label, status_value, status_dot_color = self._get_status_metric()
+        activity_summary = self._get_activity_summary()
         # Flags 的内容长度取决于设备实际状态，可能远超其他字段（远多于一个格子能容纳的宽度），
         # 因此不再挤进 4 列网格的某一格，而是单独占一整行，必要时换行显示，避免被截断到看不全。
+        # Activity（作业状态 + 进度）放在 Size 正下方，作为网格里第 8 个、带标签的格子，
+        # 不再是右下角一段没有标签、容易被误解成电量的浮动文字。
         metrics = [
-            ("Map", _truncate(f"#{self._map_data.get('id', '-')} · {self._map_data.get('name', '-')}", 22)),
-            ("Area", _format_area(self._map_data.get("total_area"))),
-            ("Mode", _truncate(_enum_label(self._map_data.get("clean_info", {}).get("mode")), 20)),
-            ("Size", _truncate(_format_size(self._map_data), 24)),
-            ("Origin", _format_point(_point_tuple(self._map_data.get("origin")))),
-            ("Backup", _truncate(f"{backup_text} · {_format_file_size(self._map_data.get('file_size'))}", 24)),
-            (status_label, _truncate(status_value, 26)),
+            ("Map", _truncate(f"#{self._map_data.get('id', '-')} · {self._map_data.get('name', '-')}", 22), None),
+            ("Area", _format_area(self._map_data.get("total_area")), None),
+            ("Mode", _truncate(_enum_label(self._map_data.get("clean_info", {}).get("mode")), 20), None),
+            ("Size", _truncate(_format_size(self._map_data), 24), None),
+            ("Origin", _format_point(_point_tuple(self._map_data.get("origin"))), None),
+            ("Backup", _truncate(f"{backup_text} · {_format_file_size(self._map_data.get('file_size'))}", 24), None),
+            (status_label, _truncate(status_value, 26), status_dot_color),
+            ("Activity", _truncate(activity_summary, 24) if activity_summary else "-", None),
         ]
 
         available_width = cell_width - 6  # 与右侧相邻格子留出的安全边距
 
-        for index, (label, value) in enumerate(metrics):
+        for index, (label, value, dot_color) in enumerate(metrics):
             row = index // 4
             column = index % 4
             x = grid_left + column * cell_width
             y = grid_top + row * cell_height
-            if label == status_label and index == len(metrics) - 1:
+            if dot_color is not None:
                 dot_r = 4
                 dot_cy = y + 6
                 draw.ellipse(
                     [x - dot_r, dot_cy - dot_r, x + dot_r, dot_cy + dot_r],
-                    fill=status_dot_color,
+                    fill=dot_color,
                 )
                 draw.text((x + dot_r * 2 + 4, y), label, fill=COLOR_TEXT_MUTED, font=label_font)
             else:
@@ -2741,13 +2759,6 @@ class TerraMowMapCamera(Camera):
                 padding=20,
             )
             chip_x += chip_width + 10
-
-        activity_summary = self._get_activity_summary()
-        if activity_summary:
-            activity_box = draw.textbbox((0, 0), activity_summary, font=title_font)
-            activity_x = right - 22 - (activity_box[2] - activity_box[0])
-            activity_y = chip_y + (28 - (activity_box[3] - activity_box[1])) / 2 - activity_box[1]
-            draw.text((activity_x, activity_y), activity_summary, fill=COLOR_TEXT_SUBTLE, font=title_font)
 
     def _render_final_image(self) -> bytes:
         """渲染最终图像。"""
