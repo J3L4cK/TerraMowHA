@@ -2685,7 +2685,7 @@ class TerraMowMapCamera(Camera):
             ("Map", _truncate(f"#{self._map_data.get('id', '-')} · {self._map_data.get('name', '-')}", 22), None),
             ("Area", _format_area(self._map_data.get("total_area")), None),
             ("Mode", _truncate(_enum_label(self._map_data.get("clean_info", {}).get("mode")), 20), None),
-            ("Size", _truncate(_format_size(self._map_data), 24), None),
+            ("Grid Size", _truncate(_format_size(self._map_data), 24), None),
             ("Origin", _format_point(_point_tuple(self._map_data.get("origin"))), None),
             ("Backup", _truncate(f"{backup_text} · {_format_file_size(self._map_data.get('file_size'))}", 24), None),
             (status_label, _truncate(status_value, 26), status_dot_color),
