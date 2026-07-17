@@ -2541,16 +2541,23 @@ class TerraMowMapCamera(Camera):
         selected_count = sum(
             1 for region in scene["regions"] for sub_region in region["sub_regions"] if sub_region["selected"]
         )
+        unselected_count = sum(
+            1 for region in scene["regions"] for sub_region in region["sub_regions"] if not sub_region["selected"]
+        )
         no_go_count = scene["scene_counts"]["forbidden_zones"] + scene["scene_counts"]["physical_forbidden_zones"]
         tunnel_count = (
             scene["scene_counts"]["cross_boundary_tunnels"] + scene["scene_counts"]["virtual_cross_boundary_tunnels"]
         )
+        # 障碍物图例只在开关打开、真的会画出来的时候才显示，避免和实际渲染内容对不上
+        obstacle_count = scene["scene_counts"]["obstacles"] if getattr(self.basic_data, "show_obstacles", True) else 0
         candidates = [
             (selected_count, "Selected", COLOR_SELECTED_OUTLINE),
+            (unselected_count, "Unselected", COLOR_MAP_DEFAULT_OUTLINE),
             (scene["scene_counts"]["required_zones"], "Required", COLOR_REQUIRED_OUTLINE),
             (scene["scene_counts"]["pass_through_zones"], "Pass-through", COLOR_PASS_THROUGH_OUTLINE),
             (no_go_count, "No-go", COLOR_RESTRICTED_OUTLINE),
             (tunnel_count, "Tunnel", COLOR_CHANNEL),
+            (obstacle_count, "Obstacle", COLOR_OBSTACLE_OUTLINE),
         ]
         items = [(label, color) for count, label, color in candidates if count > 0]
         if not items:
