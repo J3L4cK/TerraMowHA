@@ -169,15 +169,23 @@ class TerraMowZoneSelect(SelectEntity):
 
         for region in regions:
             # 只处理子分区（设备协议使用sub_regions字段名）
+            region_name = region.get('name')  # 设备协议字段名，保持不变
             sub_regions = region.get('sub_regions', [])  # 设备协议字段名，保持不变
             for sub_zone in sub_regions:
                 sub_zone_id = sub_zone.get('id')
-                sub_zone_name = sub_zone.get('name', f'Sub-zone {sub_zone_id}')
+                sub_zone_name = sub_zone.get('name')
 
                 if sub_zone_name and sub_zone_name.strip():
-                    sub_option = f"{sub_zone_name} (ID: {sub_zone_id})"
+                    # 子分区自带名称（较少见，但优先使用）
+                    display_name = sub_zone_name
+                elif region_name and region_name.strip():
+                    # 子分区通常没有单独命名，回退到用户在App中为父分区起的名字，
+                    # 而不是只显示 "Sub-zone {id}"（等同于只展示ID，没有实际名称）
+                    display_name = f"{region_name} - Zone {sub_zone_id}"
                 else:
-                    sub_option = f"Sub-zone {sub_zone_id} (ID: {sub_zone_id})"
+                    display_name = f"Sub-zone {sub_zone_id}"
+
+                sub_option = f"{display_name} (ID: {sub_zone_id})"
                 options.append(sub_option)
 
         self._options = options

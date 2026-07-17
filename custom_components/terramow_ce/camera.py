@@ -797,6 +797,18 @@ def _format_point(point: tuple[float, float] | None) -> str:
     return f"{int(round(point[0]))}, {int(round(point[1]))}"
 
 
+def _format_duration(seconds: Any) -> str:
+    """格式化作业时长（dp_113 的 work_duration，单位秒）。"""
+    total_seconds = _coerce_float(seconds)
+    if total_seconds is None or total_seconds < 0:
+        return "-"
+    total_minutes = int(total_seconds // 60)
+    hours, minutes = divmod(total_minutes, 60)
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
 def _format_size(map_data: dict[str, Any]) -> str:
     """格式化尺寸信息。"""
     width = _coerce_int(map_data.get("width"))
@@ -1044,14 +1056,18 @@ class TerraMowMapCamera(Camera):
 
         work_data = lawn_mower.current_work_data
         progress_text = None
+        duration_text = None
         if isinstance(work_data, dict) and work_data:
             total_area = _coerce_float(work_data.get("total_area"))
             clean_area = _coerce_float(work_data.get("clean_area"))
             if total_area and total_area > 0 and clean_area is not None:
                 progress_pct = max(0, min(100, round(clean_area / total_area * 100)))
                 progress_text = f"{progress_pct}%"
+            work_duration = work_data.get("work_duration")
+            if work_duration is not None:
+                duration_text = _format_duration(work_duration)
 
-        parts = [part for part in (activity_text, progress_text) if part]
+        parts = [part for part in (activity_text, progress_text, duration_text) if part]
         return " · ".join(parts)
 
     def _get_battery_connected(self) -> bool | None:
