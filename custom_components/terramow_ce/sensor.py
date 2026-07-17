@@ -1128,18 +1128,29 @@ class BatteryTemperatureStateSensor(SensorEntity):
 
     The device does not report a numeric battery temperature in degrees
     anywhere in this payload -- 'tempreture' (sic) is a coarse thermal
-    state string (e.g. "TEMPRETURE_NORMAL"), not a measurement. It was
-    previously only visible buried inside BatterySensor's attributes,
-    with a typo silently patched at read time. This gives it a proper,
-    named, diagnostic entity of its own instead. If the firmware ever
-    starts reporting a real numeric reading, this should be replaced
-    with a SensorDeviceClass.TEMPERATURE sensor.
+    state string, not a measurement. It was previously only visible
+    buried inside BatterySensor's attributes, with a typo silently
+    patched at read time. This gives it a proper, named, diagnostic
+    entity of its own instead. If the firmware ever starts reporting a
+    real numeric reading, this should be replaced with a
+    SensorDeviceClass.TEMPERATURE sensor.
+
+    TerraMow's own docs confirm the full value set for this field is
+    exactly BATTERY_TEMPRETURE_NORMAL / _OVERHEAT / _UNDERHEAT (typo and
+    all), so this is now a real ENUM sensor with translated states
+    instead of showing the raw device string.
     """
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:thermometer"
     _attr_translation_key = "battery_temperature_state"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "BATTERY_TEMPERATURE_NORMAL",
+        "BATTERY_TEMPERATURE_OVERHEAT",
+        "BATTERY_TEMPERATURE_UNDERHEAT",
+    ]
 
     def __init__(
         self,
@@ -1150,6 +1161,7 @@ class BatteryTemperatureStateSensor(SensorEntity):
         self.basic_data = basic_data
         self.host = basic_data.host
         self.hass = hass
+        self._unknown_value: str | None = None
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -1186,7 +1198,29 @@ class BatteryTemperatureStateSensor(SensorEntity):
             return None
         # 修正设备固件里的拼写（TEMPRETURE -> TEMPERATURE），与
         # BatterySensor.extra_state_attributes 里的历史处理保持一致。
-        return str(raw_value).replace('TEMPRETURE', 'TEMPERATURE')
+        value = str(raw_value).replace('TEMPRETURE', 'TEMPERATURE')
+
+        if value in self._attr_options:
+            self._unknown_value = None
+            return value
+
+        # 设备上报了文档之外的值：不要静默丢弃或抛错，记录一次并把原始值
+        # 放进 extra_state_attributes，ENUM 本身回退为未知。
+        if value != self._unknown_value:
+            _LOGGER.warning(
+                "Unknown battery temperature state from device: %s. "
+                "Exposing raw value in attributes.",
+                value,
+            )
+            self._unknown_value = value
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return entity specific state attributes."""
+        if self._unknown_value:
+            return {'unknown_battery_temperature_state': self._unknown_value}
+        return {}
 
 
 class TotalMowingSessionsSensor(SensorEntity):

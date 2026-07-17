@@ -132,7 +132,12 @@
                 }
             },
             "battery_temperature_state": {
-                "name": "Akkutemperaturstatus"
+                "name": "Akkutemperaturstatus",
+                "state": {
+                    "BATTERY_TEMPERATURE_NORMAL": "Normal",
+                    "BATTERY_TEMPERATURE_OVERHEAT": "Überhitzt",
+                    "BATTERY_TEMPERATURE_UNDERHEAT": "Zu kalt"
+                }
             },
             "fault_reason": {
                 "name": "Störungs-/Wartegrund",

@@ -149,7 +149,12 @@
         }
       },
       "battery_temperature_state": {
-        "name": "Battery Temperature State"
+        "name": "Battery Temperature State",
+        "state": {
+          "BATTERY_TEMPERATURE_NORMAL": "Normal",
+          "BATTERY_TEMPERATURE_OVERHEAT": "Overheating",
+          "BATTERY_TEMPERATURE_UNDERHEAT": "Too Cold"
+        }
       },
       "map_backup_count": {
         "name": "Map Backup Count"
