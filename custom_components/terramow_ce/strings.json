@@ -87,8 +87,14 @@
       "total_mowing_time": {
         "name": "Total Mowing Time"
       },
+      "total_mowing_sessions": {
+        "name": "Total Mowing Sessions"
+      },
       "current_session_area": {
         "name": "Current Session Area"
+      },
+      "current_session_progress": {
+        "name": "Current Session Progress"
       },
       "current_session_time": {
         "name": "Current Session Time"

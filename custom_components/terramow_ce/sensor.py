@@ -254,7 +254,79 @@ class CurrentSessionAreaSensor(SensorEntity):
         is_completed = current_work_data.get('is_completed')
         if is_completed is not None:
             attrs['is_completed'] = is_completed
-            
+
+        return attrs
+
+
+class CurrentSessionProgressSensor(SensorEntity):
+    """Current session mowing progress sensor - clean_area / total_area from dp_113"""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:percent"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_device_class = None
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "current_session_progress"
+
+    def __init__(
+        self,
+        basic_data: TerraMowBasicData,
+        hass: HomeAssistant,
+    ) -> None:
+        super().__init__()
+        self.basic_data = basic_data
+        self.host = basic_data.host
+        self.hass = hass
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={('TerraMowLawnMower', self.basic_data.host)}, # Corrected typo in identifier
+            name='TerraMow',
+            manufacturer='TerraMow',
+            model=self.basic_data.lawn_mower.device_model # Use dynamically updated model
+        )
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for this entity."""
+        return f"lawn_mower.terramow@{self.host}.current_session_progress"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the state of the sensor."""
+        if not hasattr(self.basic_data, 'lawn_mower') or not self.basic_data.lawn_mower:
+            return None
+
+        current_work_data = self.basic_data.lawn_mower.current_work_data
+        if not current_work_data:
+            return None
+
+        # total_area/clean_area 都是 0.1平方米为单位，换算时会相互抵消，直接用原始值算比例即可
+        total_area = current_work_data.get('total_area', 0)
+        clean_area = current_work_data.get('clean_area')
+        if not total_area or total_area <= 0 or clean_area is None:
+            return None
+
+        return max(0, min(100, round(clean_area / total_area * 100)))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return entity specific state attributes."""
+        if not hasattr(self.basic_data, 'lawn_mower') or not self.basic_data.lawn_mower:
+            return {}
+
+        current_work_data = self.basic_data.lawn_mower.current_work_data
+        if not current_work_data:
+            return {}
+
+        attrs: dict[str, Any] = {}
+        is_completed = current_work_data.get('is_completed')
+        if is_completed is not None:
+            attrs['is_completed'] = is_completed
+
         return attrs
 
 
@@ -842,7 +914,9 @@ async def async_setup_entry(
         
         # 统计和会话传感器
         TotalMowingTimeSensor(basic_data, hass),
+        TotalMowingSessionsSensor(basic_data, hass),
         CurrentSessionAreaSensor(basic_data, hass),
+        CurrentSessionProgressSensor(basic_data, hass),
         CurrentSessionTimeSensor(basic_data, hass),
         
         # 维护提醒传感器
@@ -1112,3 +1186,55 @@ class BatteryTemperatureStateSensor(SensorEntity):
         # 修正设备固件里的拼写（TEMPRETURE -> TEMPERATURE），与
         # BatterySensor.extra_state_attributes 里的历史处理保持一致。
         return str(raw_value).replace('TEMPRETURE', 'TEMPERATURE')
+
+
+class TotalMowingSessionsSensor(SensorEntity):
+    """Total completed mowing sessions - uses dp_124's clean_times field.
+
+    dp_124 also reports duration and clean_area (both already sensors);
+    clean_times (a plain completed-session counter) was the one field in
+    that payload nobody ever turned into an entity.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:counter"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_translation_key = "total_mowing_sessions"
+
+    def __init__(
+        self,
+        basic_data: TerraMowBasicData,
+        hass: HomeAssistant,
+    ) -> None:
+        super().__init__()
+        self.basic_data = basic_data
+        self.host = basic_data.host
+        self.hass = hass
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={('TerraMowLawnMower', self.basic_data.host)},
+            name='TerraMow',
+            manufacturer='TerraMow',
+            model=self.basic_data.lawn_mower.device_model
+        )
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for this entity."""
+        return f"lawn_mower.terramow@{self.host}.total_mowing_sessions"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the state of the sensor."""
+        if not hasattr(self.basic_data, 'lawn_mower') or not self.basic_data.lawn_mower:
+            return None
+
+        statistics_data = self.basic_data.lawn_mower.statistics_data
+        if not statistics_data:
+            return None
+
+        return statistics_data.get('clean_times')

@@ -87,8 +87,14 @@
             "total_mowing_time": {
                 "name": "Gesamte Mähzeit"
             },
+            "total_mowing_sessions": {
+                "name": "Anzahl Mäheinsätze"
+            },
             "current_session_area": {
                 "name": "Fläche der aktuellen Sitzung"
+            },
+            "current_session_progress": {
+                "name": "Fortschritt der aktuellen Sitzung"
             },
             "current_session_time": {
                 "name": "Dauer der aktuellen Sitzung"
