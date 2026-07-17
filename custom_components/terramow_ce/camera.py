@@ -2299,6 +2299,49 @@ class TerraMowMapCamera(Camera):
                 fill=inner_color,
             )
 
+    _PATH_SUPERSAMPLE = 2  # 轨迹可能跨越地图的大部分区域，用较低倍率的超采样控制内存/性能开销
+
+    def _draw_path_stroke_aa(
+        self,
+        image: Image.Image,
+        pixels: list[tuple[int, int]],
+        inner_color: tuple[int, int, int, int],
+        inner_width: int,
+        glow_color: tuple[int, int, int, int],
+        glow_width: int,
+        dash: int | None = None,
+        gap: int | None = None,
+    ) -> None:
+        """在轨迹的局部包围盒内超采样绘制线条和端点圆点，得到平滑抗锯齿的边缘
+        （直接在整张底图上画线/圆点是没有抗锯齿的，边缘会有明显锯齿）。"""
+        if len(pixels) < 2:
+            return
+        pad = glow_width + 4
+        xs = [point[0] for point in pixels]
+        ys = [point[1] for point in pixels]
+        x0 = int(math.floor(min(xs))) - pad
+        y0 = int(math.floor(min(ys))) - pad
+        x1 = int(math.ceil(max(xs))) + pad
+        y1 = int(math.ceil(max(ys))) + pad
+        tile_width = x1 - x0
+        tile_height = y1 - y0
+        scale = self._PATH_SUPERSAMPLE
+
+        def render(draw: ImageDraw.ImageDraw, s: int) -> None:
+            local_pixels = [((x - x0) * s, (y - y0) * s) for x, y in pixels]
+            self._draw_path_stroke(
+                draw,
+                local_pixels,
+                inner_color,
+                max(1, inner_width * s),
+                glow_color,
+                max(1, glow_width * s),
+                dash * s if dash is not None else None,
+                gap * s if gap is not None else None,
+            )
+
+        self._supersample_and_composite(image, (x0, y0), (tile_width, tile_height), scale, render)
+
     def _draw_path_layer(
         self,
         image: Image.Image,
@@ -2330,16 +2373,13 @@ class TerraMowMapCamera(Camera):
         if len(pixels) < 2:
             return
 
-        self._composite_draw(
+        self._draw_path_stroke_aa(
             image,
-            lambda overlay_draw: self._draw_path_stroke(
-                overlay_draw,
-                pixels,
-                default_inner,
-                default_inner_width,
-                default_glow,
-                default_glow_width,
-            ),
+            pixels,
+            default_inner,
+            default_inner_width,
+            default_glow,
+            default_glow_width,
         )
 
     def _draw_path(self, image: Image.Image, scene: dict[str, Any]) -> None:
