@@ -1538,7 +1538,8 @@ class TerraMowMapCamera(Camera):
             self._transformer = None
             self._draw_empty_map_card(image, scene)
 
-        self._draw_summary_panel(image, scene)
+        if getattr(self.basic_data, "show_info_panel", True):
+            self._draw_summary_panel(image, scene)
         self._static_image = image
 
     def _draw_shadow_layer(
@@ -1732,7 +1733,9 @@ class TerraMowMapCamera(Camera):
             for edge_line in region["edge_lines"]:
                 self._draw_polyline(draw, transformer, edge_line, COLOR_EDGE_LINE, 2)
 
-        self._draw_path(image, scene)
+        # 清扫路径是否绘制由 "Show Path" 开关控制。
+        if getattr(self.basic_data, "show_path", True):
+            self._draw_path(image, scene)
 
         for polygon in scene["required_zones"]:
             self._draw_polygon(image, draw, transformer, polygon, COLOR_REQUIRED_FILL, COLOR_REQUIRED_OUTLINE, 3)
@@ -1748,28 +1751,31 @@ class TerraMowMapCamera(Camera):
                 3,
             )
 
-        for polygon in scene["forbidden_zones"]:
-            self._draw_polygon(
-                image,
-                draw,
-                transformer,
-                polygon,
-                COLOR_RESTRICTED_FILL,
-                COLOR_RESTRICTED_OUTLINE,
-                3,
-            )
+        # 禁行区（forbidden_zones/physical_forbidden_zones）是否绘制由 "Show No-Go Zones" 开关控制；
+        # 下面 virtual_walls（虚拟墙）在同一个开关下一并处理。
+        if getattr(self.basic_data, "show_no_go_zones", True):
+            for polygon in scene["forbidden_zones"]:
+                self._draw_polygon(
+                    image,
+                    draw,
+                    transformer,
+                    polygon,
+                    COLOR_RESTRICTED_FILL,
+                    COLOR_RESTRICTED_OUTLINE,
+                    3,
+                )
 
-        for polygon in scene["physical_forbidden_zones"]:
-            self._draw_polygon(
-                image,
-                draw,
-                transformer,
-                polygon,
-                COLOR_RESTRICTED_FILL,
-                COLOR_RESTRICTED_OUTLINE,
-                4,
-            )
-            self._apply_hatch(image, transformer.to_pixels(polygon), COLOR_HATCH, spacing=12)
+            for polygon in scene["physical_forbidden_zones"]:
+                self._draw_polygon(
+                    image,
+                    draw,
+                    transformer,
+                    polygon,
+                    COLOR_RESTRICTED_FILL,
+                    COLOR_RESTRICTED_OUTLINE,
+                    4,
+                )
+                self._apply_hatch(image, transformer.to_pixels(polygon), COLOR_HATCH, spacing=12)
 
         # 障碍物是否绘制由 "Show Obstacles" 开关控制（只影响绘制，不影响坐标范围计算，
         # 这样切换开关不会导致地图整体缩放/平移跳动）。
@@ -1795,9 +1801,10 @@ class TerraMowMapCamera(Camera):
             self._composite_polygon_fill(image, pixels, COLOR_DRAW_REGION_FILL)
             self._draw_dashed_polyline(draw, pixels + [pixels[0]], COLOR_DRAW_REGION_OUTLINE, 3, 12, 8)
 
-        for wall in scene["virtual_walls"]:
-            pixels = transformer.to_pixels(wall)
-            self._draw_dashed_polyline(draw, pixels, COLOR_RESTRICTED_OUTLINE, 4, 12, 8)
+        if getattr(self.basic_data, "show_no_go_zones", True):
+            for wall in scene["virtual_walls"]:
+                pixels = transformer.to_pixels(wall)
+                self._draw_dashed_polyline(draw, pixels, COLOR_RESTRICTED_OUTLINE, 4, 12, 8)
 
         for tunnel in scene["cross_boundary_tunnels"]:
             self._draw_tunnel(image, draw, transformer, tunnel, COLOR_CHANNEL_SOFT, COLOR_CHANNEL)
@@ -1817,22 +1824,32 @@ class TerraMowMapCamera(Camera):
         if scene["station_pose"] is not None:
             self._draw_station(image, scene["station_pose"])
 
-        if scene["origin"] is not None:
+        if scene["origin"] is not None and getattr(self.basic_data, "show_origin_marker", True):
             self._draw_origin(draw, transformer.to_pixel(scene["origin"][0], scene["origin"][1]))
 
-        self._draw_map_chips(image, scene)
-        self._draw_scale_bar(image, transformer, extent_rect)
-        compass_half = 22
-        compass_gap = 16
-        compass_bounds_right, compass_bounds_top = (
-            (extent_rect[2], extent_rect[1]) if extent_rect is not None else (MAP_RECT[2] - 4, MAP_RECT[1] + 4)
-        )
-        compass_center = (
-            compass_bounds_right - compass_gap - compass_half,
-            compass_bounds_top + compass_gap + compass_half,
-        )
-        self._draw_orientation_compass(image, compass_center, scene.get("rotation_deg", 0.0))
-        self._draw_legend(image, scene)
+        # 信息面板：顶部小标签 + 底部图例。摘要面板（summary panel）在 _rebuild_static_image
+        # 里单独绘制，同样受 show_info_panel 控制，这样用户可以把整个 HUD 文字层关掉，
+        # 只留下纯地图画面（比如想要一个更干净的仪表盘图片）。
+        if getattr(self.basic_data, "show_info_panel", True):
+            self._draw_map_chips(image, scene)
+
+        if getattr(self.basic_data, "show_scale_bar", True):
+            self._draw_scale_bar(image, transformer, extent_rect)
+
+        if getattr(self.basic_data, "show_compass", True):
+            compass_half = 22
+            compass_gap = 16
+            compass_bounds_right, compass_bounds_top = (
+                (extent_rect[2], extent_rect[1]) if extent_rect is not None else (MAP_RECT[2] - 4, MAP_RECT[1] + 4)
+            )
+            compass_center = (
+                compass_bounds_right - compass_gap - compass_half,
+                compass_bounds_top + compass_gap + compass_half,
+            )
+            self._draw_orientation_compass(image, compass_center, scene.get("rotation_deg", 0.0))
+
+        if getattr(self.basic_data, "show_info_panel", True):
+            self._draw_legend(image, scene)
 
     def _composite_draw(
         self,
@@ -2610,7 +2627,12 @@ class TerraMowMapCamera(Camera):
         unselected_count = sum(
             1 for region in scene["regions"] for sub_region in region["sub_regions"] if not sub_region["selected"]
         )
-        no_go_count = scene["scene_counts"]["forbidden_zones"] + scene["scene_counts"]["physical_forbidden_zones"]
+        # No-go 图例只在开关打开、真的会画出来的时候才显示，避免和实际渲染内容对不上
+        no_go_count = (
+            scene["scene_counts"]["forbidden_zones"] + scene["scene_counts"]["physical_forbidden_zones"]
+            if getattr(self.basic_data, "show_no_go_zones", True)
+            else 0
+        )
         tunnel_count = (
             scene["scene_counts"]["cross_boundary_tunnels"] + scene["scene_counts"]["virtual_cross_boundary_tunnels"]
         )

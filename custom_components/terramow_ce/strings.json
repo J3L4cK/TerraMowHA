@@ -266,6 +266,24 @@
     "switch": {
       "show_obstacles": {
         "name": "Show Obstacles"
+      },
+      "show_path": {
+        "name": "Show Path"
+      },
+      "show_no_go_zones": {
+        "name": "Show No-Go Zones"
+      },
+      "show_info_panel": {
+        "name": "Show Info Panel"
+      },
+      "show_scale_bar": {
+        "name": "Show Scale Bar"
+      },
+      "show_compass": {
+        "name": "Show Compass"
+      },
+      "show_origin_marker": {
+        "name": "Show Origin Marker"
       }
     }
   },

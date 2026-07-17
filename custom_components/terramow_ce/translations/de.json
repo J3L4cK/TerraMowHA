@@ -266,6 +266,24 @@
         "switch": {
             "show_obstacles": {
                 "name": "Hindernisse anzeigen"
+            },
+            "show_path": {
+                "name": "Fahrweg anzeigen"
+            },
+            "show_no_go_zones": {
+                "name": "Sperrzonen anzeigen"
+            },
+            "show_info_panel": {
+                "name": "Infopanel anzeigen"
+            },
+            "show_scale_bar": {
+                "name": "Maßstabsleiste anzeigen"
+            },
+            "show_compass": {
+                "name": "Kompass anzeigen"
+            },
+            "show_origin_marker": {
+                "name": "Ursprungsmarkierung anzeigen"
             }
         }
     },

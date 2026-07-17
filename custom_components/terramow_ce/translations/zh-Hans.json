@@ -190,6 +190,24 @@
         "switch": {
             "show_obstacles": {
                 "name": "显示障碍物"
+            },
+            "show_path": {
+                "name": "显示清扫路径"
+            },
+            "show_no_go_zones": {
+                "name": "显示禁行区"
+            },
+            "show_info_panel": {
+                "name": "显示信息面板"
+            },
+            "show_scale_bar": {
+                "name": "显示比例尺"
+            },
+            "show_compass": {
+                "name": "显示指南针"
+            },
+            "show_origin_marker": {
+                "name": "显示原点标记"
             }
         }
     },

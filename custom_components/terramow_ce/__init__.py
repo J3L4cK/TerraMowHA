@@ -34,9 +34,15 @@ class TerraMowBasicData:
     compatibility_status: str = CompatibilityStatus.COMPATIBLE
     firmware_version: Optional[dict] = None
     compatibility_reason: str = ""  # Store the specific reason for compatibility check failure
-    # 本地渲染偏好（不来自设备/MQTT，只影响 camera.py 怎么画地图）：是否在地图上绘制障碍物。
-    # switch.py 里的开关实体读写这个值；camera.py 引用同一个 basic_data 实例读取它。
+    # 本地渲染偏好（不来自设备/MQTT，只影响 camera.py 怎么画地图）。
+    # switch.py 里的开关实体读写这些值；camera.py 引用同一个 basic_data 实例读取它们。
     show_obstacles: bool = True
+    show_path: bool = True
+    show_no_go_zones: bool = True  # 禁行区/虚拟墙/物理禁行区
+    show_info_panel: bool = True  # 摘要面板 + 图例 + 顶部信息小标签
+    show_scale_bar: bool = True
+    show_compass: bool = True
+    show_origin_marker: bool = True
     # switch 切换后用来找到相机实体触发重绘，由 camera.py 在初始化时设置。
     map_camera: Any = None
     
