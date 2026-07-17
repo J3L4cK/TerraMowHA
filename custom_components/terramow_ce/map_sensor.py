@@ -33,6 +33,8 @@ async def async_setup_entry(
         TerraMowMapStatusSensor(basic_data, hass),
         TerraMowMapAreaSensor(basic_data, hass),
         TerraMowCleanModeSensor(basic_data, hass),
+        TerraMowMapBackupCountSensor(basic_data, hass),
+        TerraMowHighGrassEdgeTrimModeSensor(basic_data, hass),
     ]
     
     async_add_entities(entities)
@@ -222,3 +224,94 @@ class TerraMowCleanModeSensor(TerraMowMapSensorBase):
             attrs['selected_regions_count'] = len(region_ids)
         
         return attrs
+
+
+class _TerraMowMapDataSensorBase(SensorEntity):
+    """Shared boilerplate for sensors reading the HTTP-fetched map body
+    (ha_map_v1), same source camera.py uses for rendering. Previously
+    only visible bundled into the map camera entity's attributes.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        basic_data: TerraMowBasicData,
+        hass: HomeAssistant,
+    ) -> None:
+        super().__init__()
+        self.basic_data = basic_data
+        self.host = basic_data.host
+        self.hass = hass
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={('TerraMowLawnMower', self.basic_data.host)},
+            name='TerraMow',
+            manufacturer='TerraMow',
+            model=self.basic_data.lawn_mower.device_model
+        )
+
+    def _map_data(self) -> dict:
+        if not hasattr(self.basic_data, 'lawn_mower') or not self.basic_data.lawn_mower:
+            return {}
+        return self.basic_data.lawn_mower.map_data or {}
+
+
+class TerraMowMapBackupCountSensor(_TerraMowMapDataSensorBase):
+    """Number of saved map backups (map body's backup_info_list)."""
+
+    _attr_icon = "mdi:backup-restore"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_translation_key = "map_backup_count"
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for this entity."""
+        return f"lawn_mower.terramow@{self.host}.map_backup_count"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the state of the sensor."""
+        map_data = self._map_data()
+        if not map_data:
+            return None
+        backup_info = map_data.get('backup_info_list')
+        if isinstance(backup_info, list):
+            return len(backup_info)
+        return 1 if map_data.get('has_backup') else 0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return entity specific state attributes."""
+        map_data = self._map_data()
+        if not map_data:
+            return {}
+        return {'has_backup': map_data.get('has_backup', False)}
+
+
+class TerraMowHighGrassEdgeTrimModeSensor(_TerraMowMapDataSensorBase):
+    """High-grass edge trim mode (map body's
+    mow_param.high_grass_edge_trim_mode.mode)."""
+
+    _attr_icon = "mdi:grass"
+    _attr_translation_key = "high_grass_edge_trim_mode"
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for this entity."""
+        return f"lawn_mower.terramow@{self.host}.high_grass_edge_trim_mode"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the state of the sensor."""
+        mow_param = self._map_data().get('mow_param')
+        if not isinstance(mow_param, dict):
+            return None
+        trim_mode = mow_param.get('high_grass_edge_trim_mode')
+        if not isinstance(trim_mode, dict):
+            return None
+        return trim_mode.get('mode')

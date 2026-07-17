@@ -150,6 +150,12 @@
       },
       "battery_temperature_state": {
         "name": "Battery Temperature State"
+      },
+      "map_backup_count": {
+        "name": "Map Backup Count"
+      },
+      "high_grass_edge_trim_mode": {
+        "name": "High Grass Edge Trim Mode"
       }
     },
     "camera": {
@@ -178,6 +184,15 @@
       },
       "power_switch": {
         "name": "Power Switch"
+      },
+      "boundary_locked": {
+        "name": "Boundary Locked"
+      },
+      "advanced_edge_cutting": {
+        "name": "Advanced Edge Cutting"
+      },
+      "thorough_corner_cutting": {
+        "name": "Thorough Corner Cutting"
       }
     },
     "select": {

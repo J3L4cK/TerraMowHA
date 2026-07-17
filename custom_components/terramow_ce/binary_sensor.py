@@ -33,6 +33,9 @@ async def async_setup_entry(
         TerraMowSavingDataSensor(basic_data, hass),
         TerraMowDataConversionSensor(basic_data, hass),
         TerraMowPowerSwitchSensor(basic_data, hass),
+        TerraMowBoundaryLockedSensor(basic_data, hass),
+        TerraMowAdvancedEdgeCuttingSensor(basic_data, hass),
+        TerraMowThoroughCornerCuttingSensor(basic_data, hass),
     ]
 
     async_add_entities(entities)
@@ -294,3 +297,97 @@ class TerraMowPowerSwitchSensor(BinarySensorEntity):
     def available(self):
         """Return True if entity is available."""
         return self.basic_data.lawn_mower is not None
+
+
+class _TerraMowMapDataFlagSensor(BinarySensorEntity):
+    """Shared boilerplate for booleans nested in the HTTP-fetched map body
+    (ha_map_v1, same source camera.py already reads for rendering). These
+    were previously only visible bundled into the map camera entity's
+    extra_state_attributes, not usable directly in automations.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _unique_id_suffix: str = ""
+
+    def __init__(
+        self,
+        basic_data: TerraMowBasicData,
+        hass: HomeAssistant,
+    ) -> None:
+        super().__init__()
+        self.basic_data = basic_data
+        self.host = self.basic_data.host
+        self.hass = hass
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={('TerraMowLawnMower', self.basic_data.host)},
+            name='TerraMow',
+            manufacturer='TerraMow',
+            model=self.basic_data.lawn_mower.device_model
+        )
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for this entity."""
+        return f"lawn_mower.terramow@{self.host}.{self._unique_id_suffix}"
+
+    def _map_data(self) -> dict:
+        if not hasattr(self.basic_data, 'lawn_mower') or not self.basic_data.lawn_mower:
+            return {}
+        return self.basic_data.lawn_mower.map_data or {}
+
+
+class TerraMowBoundaryLockedSensor(_TerraMowMapDataFlagSensor):
+    """Whether the mowing boundary is locked (map body's is_boundary_locked).
+
+    Deliberately no LOCK device_class here -- that class's HA convention
+    is "on" = unlocked, which would invert the raw field and be easy to
+    misread. is_on maps directly onto is_boundary_locked instead.
+    """
+
+    _attr_translation_key = "boundary_locked"
+    _attr_icon = "mdi:lock-outline"
+    _unique_id_suffix = "boundary_locked"
+
+    @property
+    def is_on(self) -> bool | None:
+        map_data = self._map_data()
+        if 'is_boundary_locked' not in map_data:
+            return None
+        return bool(map_data.get('is_boundary_locked'))
+
+
+class TerraMowAdvancedEdgeCuttingSensor(_TerraMowMapDataFlagSensor):
+    """Whether advanced edge cutting is enabled (map body's
+    enable_advanced_edge_cutting)."""
+
+    _attr_translation_key = "advanced_edge_cutting"
+    _attr_icon = "mdi:border-outside"
+    _unique_id_suffix = "advanced_edge_cutting"
+
+    @property
+    def is_on(self) -> bool | None:
+        map_data = self._map_data()
+        if 'enable_advanced_edge_cutting' not in map_data:
+            return None
+        return bool(map_data.get('enable_advanced_edge_cutting'))
+
+
+class TerraMowThoroughCornerCuttingSensor(_TerraMowMapDataFlagSensor):
+    """Whether thorough corner cutting is enabled (map body's
+    mow_param.enable_thorough_corner_cutting)."""
+
+    _attr_translation_key = "thorough_corner_cutting"
+    _attr_icon = "mdi:vector-square"
+    _unique_id_suffix = "thorough_corner_cutting"
+
+    @property
+    def is_on(self) -> bool | None:
+        mow_param = self._map_data().get('mow_param')
+        if not isinstance(mow_param, dict) or 'enable_thorough_corner_cutting' not in mow_param:
+            return None
+        return bool(mow_param.get('enable_thorough_corner_cutting'))

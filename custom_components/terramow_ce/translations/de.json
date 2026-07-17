@@ -150,6 +150,12 @@
                     "defogging": "Entfeuchtung",
                     "waiting_in_station": "Wartet in der Basisstation"
                 }
+            },
+            "map_backup_count": {
+                "name": "Anzahl Kartensicherungen"
+            },
+            "high_grass_edge_trim_mode": {
+                "name": "Modus für hohes Gras am Rand"
             }
         },
         "camera": {
@@ -178,6 +184,15 @@
             },
             "power_switch": {
                 "name": "Netzschalter"
+            },
+            "boundary_locked": {
+                "name": "Grenze gesperrt"
+            },
+            "advanced_edge_cutting": {
+                "name": "Erweitertes Randmähen"
+            },
+            "thorough_corner_cutting": {
+                "name": "Gründliches Eckenmähen"
             }
         },
         "select": {
