@@ -32,6 +32,7 @@ async def async_setup_entry(
         TerraMowUpgradingSensor(basic_data, hass),
         TerraMowSavingDataSensor(basic_data, hass),
         TerraMowDataConversionSensor(basic_data, hass),
+        TerraMowPowerSwitchSensor(basic_data, hass),
     ]
 
     async_add_entities(entities)
@@ -235,3 +236,61 @@ class TerraMowDataConversionSensor(_TerraMowLawnMowerFlagSensor):
     _attr_icon = "mdi:database-sync-outline"
     _flag_attr = "is_data_conversion_in_progress"
     _unique_id_suffix = "data_conversion_in_progress"
+
+
+class TerraMowPowerSwitchSensor(BinarySensorEntity):
+    """Physical power switch state, promoted out of dp_108.
+
+    is_switch_on was already available -- it's parsed as part of
+    battery_status -- but only ever surfaced nested inside BatterySensor's
+    extra_state_attributes, unusable directly in automations/dashboards.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "power_switch"
+    _attr_device_class = BinarySensorDeviceClass.POWER
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        basic_data: TerraMowBasicData,
+        hass: HomeAssistant,
+    ) -> None:
+        """Initialize the power switch sensor."""
+        super().__init__()
+        self.basic_data = basic_data
+        self.host = self.basic_data.host
+        self.hass = hass
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={('TerraMowLawnMower', self.basic_data.host)},
+            name='TerraMow',
+            manufacturer='TerraMow',
+            model=self.basic_data.lawn_mower.device_model
+        )
+
+    @property
+    def unique_id(self):
+        """Return a unique ID for this entity."""
+        return f"lawn_mower.terramow@{self.host}.power_switch"
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if the mower's physical power switch is on."""
+        if not hasattr(self.basic_data, 'lawn_mower') or not self.basic_data.lawn_mower:
+            return None
+
+        battery_status = self.basic_data.lawn_mower.battery_status
+        if not battery_status:
+            return None
+
+        is_switch_on = battery_status.get('is_switch_on')
+        return bool(is_switch_on) if is_switch_on is not None else None
+
+    @property
+    def available(self):
+        """Return True if entity is available."""
+        return self.basic_data.lawn_mower is not None

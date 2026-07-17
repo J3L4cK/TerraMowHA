@@ -172,6 +172,9 @@
       },
       "data_conversion_in_progress": {
         "name": "Data Conversion In Progress"
+      },
+      "power_switch": {
+        "name": "Power Switch"
       }
     },
     "select": {

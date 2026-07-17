@@ -172,6 +172,9 @@
             },
             "data_conversion_in_progress": {
                 "name": "Datenkonvertierung läuft"
+            },
+            "power_switch": {
+                "name": "Netzschalter"
             }
         },
         "select": {
