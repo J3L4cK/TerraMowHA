@@ -2291,7 +2291,8 @@ class TerraMowMapCamera(Camera):
 
     def _draw_path(self, image: Image.Image, scene: dict[str, Any]) -> None:
         """按历史路径和当前路径分别绘制轨迹。"""
-        self._draw_path_layer(image, scene.get("history_path_points", []), "history")
+        # 暂时禁用历史路径（灰色圆点轨迹）的绘制
+        # self._draw_path_layer(image, scene.get("history_path_points", []), "history")
         self._draw_path_layer(image, scene.get("current_path_points", []), "current")
 
     def _draw_path_segment(
