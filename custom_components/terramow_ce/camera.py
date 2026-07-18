@@ -2562,12 +2562,14 @@ class TerraMowMapCamera(Camera):
         img = Image.new("RGBA", (size, size), COLOR_TRANSPARENT)
         draw = ImageDraw.Draw(img, "RGBA")
 
-        wall_w = 20 * scale
+        # 底座尺寸需要能完整"装下"机器人（实机是带车库外壳的基站，机身整体停入其中），
+        # 所以底座宽度/长度都要比机器人图标（20 x 30）更大，而不是像早期版本那样比机器人还窄。
+        wall_w = 22 * scale
         wall_h = 6 * scale
         wall_box = (cx - wall_w / 2, cy - 15 * scale, cx + wall_w / 2, cy - 15 * scale + wall_h)
 
-        pad_w = 18 * scale
-        pad_len = 24 * scale
+        pad_w = 26 * scale
+        pad_len = 34 * scale
         pad_box = (cx - pad_w / 2, cy - 12 * scale, cx + pad_w / 2, cy - 12 * scale + pad_len)
 
         draw.rounded_rectangle(
@@ -2637,7 +2639,9 @@ class TerraMowMapCamera(Camera):
     def _build_robot_icon() -> Image.Image:
         """按 TerraMow 实机造型（加长圆角机身 + 前置三摄像头视觉条 + 尾部状态灯）绘制现代化图标。
 
-        机身长宽比参考实机尺寸（约 60.2 x 39.4 cm），前端（镜头一侧）朝向图像上方（-Y）。
+        机身长宽比参考实机尺寸（60.2 x 39.4 cm，约 1.53:1），比早期版本更修长，
+        且整体宽度小于基站底座宽度，这样机器人图标不会看起来比基站还宽。
+        前端（镜头一侧）朝向图像上方（-Y）。
         先在超采样画布上绘制，再降采样到目标尺寸，得到平滑抗锯齿的边缘。
         """
         scale = TerraMowMapCamera._ICON_SUPERSAMPLE
@@ -2646,10 +2650,10 @@ class TerraMowMapCamera(Camera):
         img = Image.new("RGBA", (size, size), COLOR_TRANSPARENT)
         draw = ImageDraw.Draw(img, "RGBA")
 
-        body_half_w = 11 * scale
-        half_len_front = 15 * scale
-        half_len_back = 13 * scale
-        radius = 7 * scale
+        body_half_w = 10 * scale
+        half_len_front = 16 * scale
+        half_len_back = 14 * scale
+        radius = 6 * scale
         body_box = (cx - body_half_w, cy - half_len_front, cx + body_half_w, cy + half_len_back)
 
         draw.rounded_rectangle(
@@ -2684,7 +2688,7 @@ class TerraMowMapCamera(Camera):
 
         lens_y = (visor_box[1] + visor_box[3]) / 2
         lens_r = max(1.0, scale * 0.6)
-        for lens_x in (cx - 6 * scale, cx, cx + 6 * scale):
+        for lens_x in (cx - 5 * scale, cx, cx + 5 * scale):
             draw.ellipse([lens_x - lens_r, lens_y - lens_r, lens_x + lens_r, lens_y + lens_r], fill=COLOR_ROBOT_LENS)
 
         led_r = 1.4 * scale
@@ -2763,6 +2767,11 @@ class TerraMowMapCamera(Camera):
         )
         # 障碍物图例只在开关打开、真的会画出来的时候才显示，避免和实际渲染内容对不上
         obstacle_count = scene["scene_counts"]["obstacles"] if getattr(self.basic_data, "show_obstacles", True) else 0
+        # 蓝色轨迹（当前作业路径）图例同理：只在 "Show Path" 开关打开、且这次场景里
+        # 确实有轨迹点会画出来的时候才显示。
+        path_count = (
+            len(scene.get("current_path_points", [])) if getattr(self.basic_data, "show_path", True) else 0
+        )
         candidates = [
             (selected_count, "Selected", COLOR_SELECTED_OUTLINE),
             (unselected_count, "Unselected", COLOR_MAP_DEFAULT_OUTLINE),
@@ -2771,6 +2780,7 @@ class TerraMowMapCamera(Camera):
             (no_go_count, "No-go", COLOR_RESTRICTED_OUTLINE),
             (tunnel_count, "Tunnel", COLOR_TUNNEL_ROAD_OUTLINE),
             (obstacle_count, "Obstacle", COLOR_OBSTACLE_OUTLINE),
+            (path_count, "Path", COLOR_PATH_CURRENT),
         ]
         items = [(label, color) for count, label, color in candidates if count > 0]
         if not items:
