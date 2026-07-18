@@ -109,7 +109,10 @@
                 "name": "Verbleibende Laufzeit der Basisstation"
             },
             "next_scheduled_start": {
-                "name": "Nächster geplanter Start"
+                "name": "Nächster geplanter Start",
+                "state": {
+                    "none": "Kein anstehender Zeitplan"
+                }
             },
             "version_compatibility": {
                 "name": "Versionskompatibilität",

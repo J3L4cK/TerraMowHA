@@ -706,17 +706,30 @@ class NextScheduledStartSensor(SensorEntity):
     
     @property
     def native_value(self) -> str | None:
-        """Return the state of the sensor."""
+        """Return the state of the sensor.
+
+        Previously returned None (shown as "Unknown" in HA) both when we
+        genuinely have no data yet from the device, and when the device
+        has explicitly confirmed there's no upcoming schedule
+        (schedule_data present but exist=False). extra_state_attributes
+        already distinguished the two via has_schedule, but the visible
+        state itself didn't -- so a mower with no schedule configured
+        looked identical to a broken sensor. Now returns "none" (a real,
+        translated value) for the confirmed-empty case, and only falls
+        back to None/Unknown when no dp_138 payload has arrived at all.
+        """
         if not hasattr(self.basic_data, 'lawn_mower') or not self.basic_data.lawn_mower:
             return None
             
         schedule_data = self.basic_data.lawn_mower.schedule_data
         if not schedule_data:
+            # 还没收到过 dp_138 的任何数据，这才是真正的 Unknown。
             return None
         
         # 检查是否存在预约
         if not schedule_data.get('exist', False):
-            return None
+            # 设备已经明确报告"没有预约"，不再是 Unknown。
+            return "none"
         
         start_time = schedule_data.get('start_time', {})
         if not start_time or 'hour' not in start_time or 'minute' not in start_time:

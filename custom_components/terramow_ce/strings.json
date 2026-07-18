@@ -109,7 +109,10 @@
         "name": "Remaining Base Station Time"
       },
       "next_scheduled_start": {
-        "name": "Next Scheduled Start"
+        "name": "Next Scheduled Start",
+        "state": {
+          "none": "No Upcoming Schedule"
+        }
       },
       "version_compatibility": {
         "name": "Version Compatibility",
