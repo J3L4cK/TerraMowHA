@@ -448,6 +448,11 @@ def _ellipse_points(ellipse: Any, segments: int = 36) -> list[tuple[float, float
         radius_x = _coerce_float(ellipse.get("a"))
     if radius_y is None:
         radius_y = _coerce_float(ellipse.get("b"))
+    # 正圆（不是椭圆）通常只有一个 radius 字段，x/y 半径相等。
+    if radius_x is None:
+        radius_x = _coerce_float(ellipse.get("radius"))
+    if radius_y is None:
+        radius_y = _coerce_float(ellipse.get("radius"))
     if radius_x is None and radius_y is not None:
         radius_x = radius_y
     if radius_y is None and radius_x is not None:
@@ -494,10 +499,23 @@ def _extract_polygons(item: Any) -> list[list[tuple[float, float]]]:
         if len(points) >= 3:
             polygons.append(points)
 
-    ellipse = item.get("ellipse")
-    ellipse_points = _ellipse_points(ellipse)
-    if len(ellipse_points) >= 3:
-        polygons.append(ellipse_points)
+    # 圆形（Ellipse）区域可能出现在几种不同的嵌套位置：直接挂在 item 顶层
+    # (item.ellipse)、包在 boundary 字段里 (item.boundary.ellipse)，或者
+    # boundary 字段本身就是一个椭圆描述（没有多边形的 points，只有圆心/半径）。
+    # 只处理其中一种会导致圆形禁行区之类的形状被漏画——多边形区域正常显示，
+    # 圆形区域却完全不见——所以三种都尝试一遍，命中的都加进去（重复的会在
+    # 后面的坐标去重环节自然合并，不会重复绘制出明显的问题）。
+    boundary = item.get("boundary")
+    ellipse_candidates: list[Any] = [item.get("ellipse")]
+    if isinstance(boundary, dict):
+        ellipse_candidates.append(boundary.get("ellipse"))
+        if "points" not in boundary:
+            ellipse_candidates.append(boundary)
+    for ellipse in ellipse_candidates:
+        ellipse_points = _ellipse_points(ellipse)
+        if len(ellipse_points) >= 3:
+            polygons.append(ellipse_points)
+            break
 
     return polygons
 
