@@ -5,6 +5,7 @@ from typing import Any
 
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from homeassistant.components.number import (
     NumberEntity,
@@ -41,8 +42,9 @@ async def async_setup_entry(
         MainDirectionAutoRotateIntervalNumber(basic_data, hass),
         MultipleDirectionAngle1Number(basic_data, hass),
         MultipleDirectionAngle2Number(basic_data, hass),
+        PathSimplifyToleranceNumber(basic_data, hass),
     ]
-    
+
     async_add_entities(entities)
 
 
@@ -866,5 +868,76 @@ class MultipleDirectionAngle2Number(TerraMowNumberBase):
                     attrs['paired_angle1'] = angles[0]
                     if len(angles) > 1:
                         attrs['angle_difference'] = abs(angles[1] - angles[0])
-        
+
         return attrs
+
+
+class PathSimplifyToleranceNumber(NumberEntity, RestoreEntity):
+    """本地渲染偏好：当前作业轨迹在画到地图上之前的抽稀容差（像素）。
+
+    不与设备通信、不影响割草机行为 -- 只控制 camera.py 在 _draw_path_layer 里
+    简化轨迹点的力度：值越大，保留的点越少（轨迹更简化、渲染更快，细节更少）；
+    值越小，保留的点越多（轨迹更贴合原始路径，但点数多时渲染更慢）。
+    和 switch.py 里的显示开关是同一套本地偏好模式：读写 TerraMowBasicData 上的
+    同名字段，camera.py 画图时读取，重启后用 RestoreEntity 恢复上次的值。
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "path_simplify_tolerance"
+    _attr_icon = "mdi:vector-polyline-edit"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_mode = NumberMode.BOX
+    _attr_native_min_value = 0.2
+    _attr_native_max_value = 5.0
+    _attr_native_step = 0.1
+
+    def __init__(
+        self,
+        basic_data: TerraMowBasicData,
+        hass: HomeAssistant,
+    ) -> None:
+        super().__init__()
+        self.basic_data = basic_data
+        self.host = basic_data.host
+        self.hass = hass
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        # 和 switch.py 里的地图显示开关挂在同一个 "TerraMow Map" 子设备下，
+        # 因为这也是一个纯本地渲染偏好，不是割草机本身的设置。
+        return DeviceInfo(
+            identifiers={("TerraMowLawnMower", f"{self.basic_data.host}_map")},
+            name="TerraMow Map",
+            manufacturer="TerraMow",
+            model=self.basic_data.lawn_mower.device_model,
+            via_device=("TerraMowLawnMower", self.basic_data.host),
+        )
+
+    @property
+    def unique_id(self):
+        return f"lawn_mower.terramow@{self.host}.path_simplify_tolerance"
+
+    @property
+    def native_value(self) -> float:
+        return float(getattr(self.basic_data, "path_simplify_tolerance", 0.9))
+
+    @property
+    def available(self) -> bool:
+        return self.basic_data.lawn_mower is not None
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the previous tolerance value after a restart."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None and last_state.state not in (None, "unknown", "unavailable"):
+            try:
+                self.basic_data.path_simplify_tolerance = float(last_state.state)
+            except ValueError:
+                pass
+
+    async def async_set_native_value(self, value: float) -> None:
+        self.basic_data.path_simplify_tolerance = float(value)
+        self.async_write_ha_state()
+        map_camera = self.basic_data.map_camera
+        if map_camera is not None:
+            await map_camera.async_refresh_after_settings_change()

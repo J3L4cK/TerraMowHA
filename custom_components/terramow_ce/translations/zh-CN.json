@@ -127,6 +127,12 @@
         "binary_sensor": {
             "charging_state": {
                 "name": "充电状态"
+            },
+            "charging_station_configured": {
+                "name": "已配置充电站"
+            },
+            "trapped_points_detected": {
+                "name": "检测到卡困点"
             }
         },
         "select": {
@@ -185,6 +191,9 @@
             },
             "multiple_direction_angle2": {
                 "name": "第二主方向角度"
+            },
+            "path_simplify_tolerance": {
+                "name": "路径简化容差"
             }
         },
         "switch": {
@@ -208,6 +217,12 @@
             },
             "show_origin_marker": {
                 "name": "显示原点标记"
+            },
+            "show_legend": {
+                "name": "显示图例"
+            },
+            "lock_map_north_up": {
+                "name": "锁定地图正北朝上"
             }
         }
     },

@@ -36,6 +36,8 @@ async def async_setup_entry(
         TerraMowBoundaryLockedSensor(basic_data, hass),
         TerraMowAdvancedEdgeCuttingSensor(basic_data, hass),
         TerraMowThoroughCornerCuttingSensor(basic_data, hass),
+        TerraMowChargingStationConfiguredSensor(basic_data, hass),
+        TerraMowTrappedPointsSensor(basic_data, hass),
     ]
 
     async_add_entities(entities)
@@ -391,3 +393,51 @@ class TerraMowThoroughCornerCuttingSensor(_TerraMowMapDataFlagSensor):
         if not isinstance(mow_param, dict) or 'enable_thorough_corner_cutting' not in mow_param:
             return None
         return bool(mow_param.get('enable_thorough_corner_cutting'))
+
+
+class TerraMowChargingStationConfiguredSensor(_TerraMowMapDataFlagSensor):
+    """Whether the current map has a charging station configured
+    (map body's has_station).
+
+    camera.py already reads this internally to decide whether to draw the
+    station icon and to fall back to a docked pose when the live pose is
+    stale, but it was never available on its own as queryable entity state.
+    """
+
+    _attr_translation_key = "charging_station_configured"
+    _attr_icon = "mdi:home-lightning-bolt-outline"
+    _unique_id_suffix = "charging_station_configured"
+
+    @property
+    def is_on(self) -> bool | None:
+        map_data = self._map_data()
+        if 'has_station' not in map_data:
+            return None
+        return bool(map_data.get('has_station'))
+
+
+class TerraMowTrappedPointsSensor(_TerraMowMapDataFlagSensor):
+    """Whether the map has any recorded "trapped point" markers (map body's
+    trapped_points) -- spots where the mower previously got stuck.
+
+    camera.py already draws these as diamond markers on the map and counts
+    them for the legend, but there was no way to tell from an automation or
+    dashboard, without opening the camera image, whether any exist.
+    """
+
+    _attr_translation_key = "trapped_points_detected"
+    _attr_icon = "mdi:alert-circle-outline"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _unique_id_suffix = "trapped_points_detected"
+
+    @property
+    def is_on(self) -> bool | None:
+        map_data = self._map_data()
+        if 'trapped_points' not in map_data:
+            return None
+        return bool(map_data.get('trapped_points'))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        trapped_points = self._map_data().get('trapped_points') or []
+        return {'trapped_point_count': len(trapped_points)}

@@ -30,6 +30,7 @@ class MapDisplayToggleDescription:
     attr_name: str
     translation_key: str
     icon: str
+    default: bool = True  # 必须和 TerraMowBasicData 里同名字段的 dataclass 默认值保持一致
 
 
 # 注意：show_obstacles 的 attr_name / translation_key 保持不变以保证向后兼容
@@ -42,6 +43,10 @@ MAP_DISPLAY_TOGGLES: tuple[MapDisplayToggleDescription, ...] = (
     MapDisplayToggleDescription("show_scale_bar", "show_scale_bar", "mdi:ruler"),
     MapDisplayToggleDescription("show_compass", "show_compass", "mdi:compass-outline"),
     MapDisplayToggleDescription("show_origin_marker", "show_origin_marker", "mdi:crosshairs"),
+    MapDisplayToggleDescription("show_legend", "show_legend", "mdi:format-list-bulleted"),
+    # 默认关闭：这个开关会把整张地图旋转，行为变化比其它纯显示/隐藏开关更大，
+    # 所以新装用户默认保持和旧版本一致（不旋转），需要的人自己打开。
+    MapDisplayToggleDescription("lock_map_north_up", "lock_map_north_up", "mdi:compass-outline", default=False),
 )
 
 
@@ -101,7 +106,7 @@ class TerraMowMapDisplaySwitch(SwitchEntity, RestoreEntity):
 
     @property
     def is_on(self) -> bool:
-        return getattr(self.basic_data, self._description.attr_name, True)
+        return getattr(self.basic_data, self._description.attr_name, self._description.default)
 
     @property
     def available(self) -> bool:

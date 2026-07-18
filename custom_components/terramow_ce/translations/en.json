@@ -198,6 +198,12 @@
             },
             "thorough_corner_cutting": {
                 "name": "Thorough Corner Cutting"
+            },
+            "charging_station_configured": {
+                "name": "Charging Station Configured"
+            },
+            "trapped_points_detected": {
+                "name": "Trapped Points Detected"
             }
         },
         "select": {
@@ -256,6 +262,9 @@
             },
             "multiple_direction_angle2": {
                 "name": "Second Direction Angle"
+            },
+            "path_simplify_tolerance": {
+                "name": "Path Simplify Tolerance"
             }
         },
         "update": {
@@ -284,6 +293,12 @@
             },
             "show_origin_marker": {
                 "name": "Show Origin Marker"
+            },
+            "show_legend": {
+                "name": "Show Legend"
+            },
+            "lock_map_north_up": {
+                "name": "Lock Map North-Up"
             }
         }
     },

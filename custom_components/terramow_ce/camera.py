@@ -217,7 +217,11 @@ class CoordinateTransformer:
         points: list[tuple[float, float]],
         rect: tuple[int, int, int, int],
         padding: int = MAP_PADDING,
+        rotation_deg: float = 0.0,
     ) -> None:
+        """rotation_deg：在缩放/平移之前先把所有点绕内容中心旋转这个角度（用于"锁定地图正北朝上"）。
+        取值约定和 _draw_orientation_compass 的指南针一致（顺时针为正），传入 map_view_rotate_angle
+        本身即可让地图定义的"北"朝向画布正上方；默认 0 时完全不旋转，行为和旧版本一致。"""
         self.left, self.top, self.right, self.bottom = rect
         self.padding = padding
         self._usable_width = max(1.0, float(self.right - self.left - 2 * padding))
@@ -225,14 +229,23 @@ class CoordinateTransformer:
         self._scale = 1.0
         self._offset_x = float(self.left + padding)
         self._offset_y = float(self.top + padding)
+        self._rotation_rad = math.radians(-rotation_deg)
+        self._pivot_x = 0.0
+        self._pivot_y = 0.0
 
         if not points:
             return
 
         xs = [point[0] for point in points]
         ys = [point[1] for point in points]
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
+        self._pivot_x = (min(xs) + max(xs)) / 2
+        self._pivot_y = (min(ys) + max(ys)) / 2
+
+        rotated_points = [self._rotate_raw(point[0], point[1]) for point in points]
+        rxs = [point[0] for point in rotated_points]
+        rys = [point[1] for point in rotated_points]
+        min_x, max_x = min(rxs), max(rxs)
+        min_y, max_y = min(rys), max(rys)
 
         range_x = max(1.0, max_x - min_x)
         range_y = max(1.0, max_y - min_y)
@@ -252,10 +265,24 @@ class CoordinateTransformer:
             - min_y * self._scale
         )
 
+    def _rotate_raw(self, x: float, y: float) -> tuple[float, float]:
+        """绕内容中心旋转原始地图坐标（旋转发生在缩放/平移之前）。"""
+        if self._rotation_rad == 0.0:
+            return x, y
+        dx = x - self._pivot_x
+        dy = y - self._pivot_y
+        cos_a = math.cos(self._rotation_rad)
+        sin_a = math.sin(self._rotation_rad)
+        return (
+            self._pivot_x + dx * cos_a - dy * sin_a,
+            self._pivot_y + dx * sin_a + dy * cos_a,
+        )
+
     def to_pixel(self, x: float, y: float) -> tuple[int, int]:
-        """转换地图坐标到像素坐标（仅做缩放和平移）。"""
-        px = int(round(x * self._scale + self._offset_x))
-        py = int(round(y * self._scale + self._offset_y))
+        """转换地图坐标到像素坐标（旋转 + 缩放 + 平移）。"""
+        rx, ry = self._rotate_raw(x, y)
+        px = int(round(rx * self._scale + self._offset_x))
+        py = int(round(ry * self._scale + self._offset_y))
         return px, py
 
     def to_pixels(self, points: list[tuple[float, float]]) -> list[tuple[int, int]]:
@@ -889,6 +916,7 @@ class TerraMowMapCamera(Camera):
         self._robot_image: Image.Image | None = None
         self._station_image: Image.Image | None = None
         self._transformer: CoordinateTransformer | None = None
+        self._scene_rotation_deg: float = 0.0  # 当前烘焙进 transformer 的旋转角度，供图标朝向/指南针复用
         self._cached_png: bytes | None = None
         self._last_pose_state_update = 0.0
         self._render_metadata: dict[str, Any] = {}
@@ -1527,11 +1555,17 @@ class TerraMowMapCamera(Camera):
         image = Image.new("RGBA", (IMAGE_WIDTH, IMAGE_HEIGHT), COLOR_APP_BG)
         self._draw_background(image)
 
+        # "Lock Map North-Up" 开关打开时，把 map_view_rotate_angle 直接烘焙进坐标变换里，
+        # 让地图定义的"北"始终朝向画布正上方；关闭时保持旧行为（原始坐标系，不旋转）。
+        lock_north_up = getattr(self.basic_data, "lock_map_north_up", False)
+        self._scene_rotation_deg = scene.get("rotation_deg", 0.0) if lock_north_up else 0.0
+
         if scene["all_points"]:
             self._transformer = CoordinateTransformer(
                 scene["all_points"],
                 self._get_map_rect(),
                 padding=MAP_PADDING,
+                rotation_deg=self._scene_rotation_deg,
             )
             self._draw_scene(image, scene)
         else:
@@ -1863,9 +1897,12 @@ class TerraMowMapCamera(Camera):
                 compass_bounds_right - compass_gap - compass_half,
                 compass_bounds_top + compass_gap + compass_half,
             )
-            self._draw_orientation_compass(image, compass_center, scene.get("rotation_deg", 0.0))
+            # 旋转角度里已经烘焙进 transformer 的那部分不用再画出来，
+            # 否则 "锁定正北朝上" 时地图已经转正了，指南针却还在转就会重复计算。
+            compass_rotation_deg = scene.get("rotation_deg", 0.0) - self._scene_rotation_deg
+            self._draw_orientation_compass(image, compass_center, compass_rotation_deg)
 
-        if getattr(self.basic_data, "show_info_panel", True):
+        if getattr(self.basic_data, "show_info_panel", True) and getattr(self.basic_data, "show_legend", True):
             self._draw_legend(image, scene)
 
     def _composite_draw(
@@ -2404,8 +2441,11 @@ class TerraMowMapCamera(Camera):
             default_glow = COLOR_PATH_CURRENT_GLOW
             default_inner_width = 12
             default_glow_width = 18
-            simplify_epsilon = 0.9
-            simplify_min_segment = 1.0
+            # 由 "Path Simplify Tolerance" 数值实体调节：值越大，轨迹上保留的点越少
+            # （更简化、渲染更快），值越小则保留更多细节。min_segment 按默认 0.9:1.0 的
+            # 比例跟着一起缩放，保持两者原本的相对关系。
+            simplify_epsilon = max(0.1, float(getattr(self.basic_data, "path_simplify_tolerance", 0.9)))
+            simplify_min_segment = simplify_epsilon * (1.0 / 0.9)
 
         pixels = [transformer.to_pixel(point["x"], point["y"]) for point in path_points]
         pixels = _simplify_path_pixels(pixels, simplify_epsilon, simplify_min_segment)
@@ -2516,6 +2556,9 @@ class TerraMowMapCamera(Camera):
         theta = _coerce_angle_radians(pose.get("theta"), milli_radian=True)
         deg = theta * 180 / math.pi
         deg = deg - 90
+        # 地图整体旋转了 self._scene_rotation_deg 度（"锁定正北朝上"）时，图标朝向也要跟着
+        # 转同样的角度，否则地图转正了、基站图标却还指向旧方向，看起来就"转歪"了。
+        deg -= self._scene_rotation_deg
 
         station_rotated = self._station_image.rotate(-deg, expand=True, resample=Image.BICUBIC, fillcolor=COLOR_TRANSPARENT)
 
@@ -2612,6 +2655,8 @@ class TerraMowMapCamera(Camera):
 
         deg = yaw * 180 / math.pi
         deg = deg - 90
+        # 同 _draw_station：地图旋转了多少度，图标朝向也要跟着补偿同样的角度。
+        deg -= self._scene_rotation_deg
 
         robot_rotated = self._robot_image.rotate(-deg, expand=True, resample=Image.BICUBIC, fillcolor=COLOR_TRANSPARENT)
 

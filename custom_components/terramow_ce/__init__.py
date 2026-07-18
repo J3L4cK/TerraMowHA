@@ -43,6 +43,9 @@ class TerraMowBasicData:
     show_scale_bar: bool = True
     show_compass: bool = True
     show_origin_marker: bool = True
+    show_legend: bool = True  # 独立于 show_info_panel，可以单独隐藏图例
+    lock_map_north_up: bool = False  # 把 map_view_rotate_angle 烘焙进坐标变换，让地图定义的"北"始终朝上
+    path_simplify_tolerance: float = 0.9  # 当前作业轨迹的抽稀容差（像素），越大越简化
     # switch 切换后用来找到相机实体触发重绘，由 camera.py 在初始化时设置。
     map_camera: Any = None
     

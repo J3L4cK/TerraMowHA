@@ -198,6 +198,12 @@
             },
             "thorough_corner_cutting": {
                 "name": "Gründliches Eckenmähen"
+            },
+            "charging_station_configured": {
+                "name": "Ladestation eingerichtet"
+            },
+            "trapped_points_detected": {
+                "name": "Feststeckpunkte erkannt"
             }
         },
         "select": {
@@ -256,6 +262,9 @@
             },
             "multiple_direction_angle2": {
                 "name": "Zweiter Richtungswinkel"
+            },
+            "path_simplify_tolerance": {
+                "name": "Vereinfachungstoleranz der Route"
             }
         },
         "update": {
@@ -284,6 +293,12 @@
             },
             "show_origin_marker": {
                 "name": "Ursprungsmarkierung anzeigen"
+            },
+            "show_legend": {
+                "name": "Legende anzeigen"
+            },
+            "lock_map_north_up": {
+                "name": "Karte nach Norden ausrichten"
             }
         }
     },
