@@ -51,7 +51,9 @@ COLOR_TEXT_WHITE = (255, 255, 255, 255)
 COLOR_MAP_DEFAULT_FILL = (220, 224, 232, 255)
 COLOR_MAP_DEFAULT_OUTLINE = (198, 199, 204, 255)
 COLOR_CHANNEL = (255, 196, 0, 255)
-COLOR_CHANNEL_SOFT = (255, 247, 219, 160)
+# 跨区通道画成一条"马路"：灰色沥青路面 + 黄色路缘（复用 COLOR_CHANNEL）+ 白色虚线车道线
+COLOR_TUNNEL_ROAD = (104, 108, 116, 255)
+COLOR_TUNNEL_LANE_LINE = (255, 255, 255, 235)
 COLOR_RESTRICTED_FILL = (239, 68, 68, 28)
 COLOR_RESTRICTED_OUTLINE = (239, 68, 68, 255)
 COLOR_PASS_THROUGH_FILL = (255, 162, 49, 36)
@@ -1880,9 +1882,9 @@ class TerraMowMapCamera(Camera):
                 self._draw_dashed_polyline(draw, pixels, COLOR_RESTRICTED_OUTLINE, 4, 12, 8)
 
         for tunnel in scene["cross_boundary_tunnels"]:
-            self._draw_tunnel(image, draw, transformer, tunnel, COLOR_CHANNEL_SOFT, COLOR_CHANNEL)
+            self._draw_tunnel(image, draw, transformer, tunnel, COLOR_TUNNEL_ROAD, COLOR_CHANNEL)
         for tunnel in scene["virtual_cross_boundary_tunnels"]:
-            self._draw_tunnel(image, draw, transformer, tunnel, COLOR_CHANNEL_SOFT, COLOR_CHANNEL)
+            self._draw_tunnel(image, draw, transformer, tunnel, COLOR_TUNNEL_ROAD, COLOR_CHANNEL)
 
         for marker in scene["cross_boundary_markers"]:
             self._draw_marker(image, transformer.to_pixel(marker[0], marker[1]), COLOR_CHANNEL, "diamond")
@@ -2091,16 +2093,24 @@ class TerraMowMapCamera(Camera):
         fill: tuple[int, int, int, int],
         outline: tuple[int, int, int, int],
     ) -> None:
-        """绘制跨区通道。"""
+        """绘制跨区通道：做成一条"马路"——黄色路缘 + 灰色沥青路面 + 白色虚线车道线。"""
         for polygon in tunnel.get("polygons", []):
             self._draw_polygon(image, draw, transformer, polygon, fill, outline, 3)
+
         for polyline in tunnel.get("polylines", []):
             pixels = transformer.to_pixels(polyline)
-            self._composite_draw(image, lambda overlay_draw: overlay_draw.line(pixels, fill=fill, width=10))
-            draw.line(pixels, fill=outline, width=5)
+            if len(pixels) < 2:
+                continue
+            # 路缘：较宽的黄色描边打底
+            draw.line(pixels, fill=outline, width=15, joint="curve")
+            # 路面：灰色沥青，比路缘窄一圈，两侧露出黄色路缘
+            draw.line(pixels, fill=fill, width=11, joint="curve")
+            # 车道线：居中的白色虚线，呼应真实马路的车道标线
+            self._draw_dashed_polyline(draw, pixels, COLOR_TUNNEL_LANE_LINE, 2, 14, 10)
             for point in (pixels[0], pixels[-1]):
+                radius = 7
                 draw.ellipse(
-                    [point[0] - 5, point[1] - 5, point[0] + 5, point[1] + 5],
+                    [point[0] - radius, point[1] - radius, point[0] + radius, point[1] + radius],
                     fill=outline,
                 )
 
