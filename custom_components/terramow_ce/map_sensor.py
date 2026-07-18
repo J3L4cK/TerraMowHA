@@ -40,7 +40,17 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 class TerraMowMapSensorBase(SensorEntity):
-    """地图传感器基类"""
+    """地图传感器基类
+
+    回调注册曾经只在 __init__ 里做一次，且只在那一刻
+    basic_data.lawn_mower 恰好已经存在时才生效。但 lawn_mower 和 sensor
+    platform 是被 HA 并发启动的（hass.config_entries.async_forward_entry_setups），
+    先后顺序没有保证，一旦这个 sensor 实体先于 lawn_mower 实体构造出来，
+    回调就永远注册不上，self._map_info 永远是空字典，依赖它的子类
+    （TerraMowMapAreaSensor、TerraMowCleanModeSensor）就会永远显示
+    "Unknown"。现改为在 async_added_to_hass 里注册，并提供一个懒读取
+    兜底方法，即使回调没注册上也能靠轮询自愈。
+    """
     
     def __init__(
         self,
@@ -52,11 +62,30 @@ class TerraMowMapSensorBase(SensorEntity):
         self.host = basic_data.host
         self.hass = hass
         self._map_info: dict[str, Any] = {}
-        
-        # 注册地图信息回调
-        if hasattr(basic_data, 'lawn_mower') and basic_data.lawn_mower:
-            basic_data.lawn_mower.register_map_callback(self._on_map_info)
-    
+        self._callback_registered = False
+
+    async def async_added_to_hass(self) -> None:
+        """Register the map-info callback once attached to hass."""
+        await super().async_added_to_hass()
+        self._try_register_callback()
+
+    def _try_register_callback(self) -> None:
+        if self._callback_registered:
+            return
+        lawn_mower = getattr(self.basic_data, 'lawn_mower', None)
+        if lawn_mower:
+            lawn_mower.register_map_callback(self._on_map_info)
+            self._callback_registered = True
+
+    def _current_map_info(self) -> dict[str, Any]:
+        """Return the latest map info, falling back to a live read from
+        the lawn_mower entity if the push callback hasn't populated
+        anything yet."""
+        if self._map_info:
+            return self._map_info
+        lawn_mower = getattr(self.basic_data, 'lawn_mower', None)
+        return (lawn_mower.map_info if lawn_mower else {}) or {}
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
@@ -167,11 +196,12 @@ class TerraMowMapAreaSensor(TerraMowMapSensorBase):
     @property
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
-        if not self._map_info:
+        map_info = self._current_map_info()
+        if not map_info:
             return None
         
         # total_area单位为0.1平方米，转换为平方米
-        total_area = self._map_info.get('total_area', 0)
+        total_area = map_info.get('total_area', 0)
         return round(total_area / 10, 1) if total_area else None
 
 
@@ -200,10 +230,11 @@ class TerraMowCleanModeSensor(TerraMowMapSensorBase):
     @property
     def native_value(self) -> str | None:
         """Return the state of the sensor."""
-        if not self._map_info:
+        map_info = self._current_map_info()
+        if not map_info:
             return None
         
-        clean_info = self._map_info.get('clean_info', {})
+        clean_info = map_info.get('clean_info', {})
         mode = clean_info.get('mode', '')
         
         return mode if mode else None
@@ -211,10 +242,11 @@ class TerraMowCleanModeSensor(TerraMowMapSensorBase):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return entity specific state attributes."""
-        if not self._map_info:
+        map_info = self._current_map_info()
+        if not map_info:
             return {}
         
-        clean_info = self._map_info.get('clean_info', {})
+        clean_info = map_info.get('clean_info', {})
         attrs = {}
         
         # 根据不同的作业模式显示详细信息

@@ -816,7 +816,21 @@ class VersionCompatibilitySensor(SensorEntity):
 
 
 class TerraMowPoseSensor(SensorEntity):
-    """实时姿态传感器（2Hz）"""
+    """实时姿态传感器（2Hz）
+
+    注册 pose 回调曾经只在 __init__ 里做，且只在
+    basic_data.lawn_mower 那一刻已经存在时才生效。但 HA 是通过
+    async_forward_entry_setups 并发启动 lawn_mower / sensor 等各个
+    platform 的，谁先谁后没有保证；一旦 sensor platform 先于
+    lawn_mower platform 构造出这个实体，回调就永远注册不上，
+    self._pose 永远是空字典，native_value 永远返回 None，
+    在 HA 里表现为这个实体永远显示 "Unknown"。
+
+    现在改为在 async_added_to_hass（entity 已挂到 hass 之后才调用，
+    lawn_mower platform 大概率已就绪）里注册；并且 native_value /
+    extra_state_attributes 增加了一个懒读取兜底：即使回调注册没赶上，
+    也会直接读 lawn_mower.pose，靠 HA 默认轮询自愈，而不是永远卡住。
+    """
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:crosshairs-gps"
@@ -833,9 +847,20 @@ class TerraMowPoseSensor(SensorEntity):
         self.host = basic_data.host
         self.hass = hass
         self._pose: dict[str, Any] = {}
+        self._callback_registered = False
 
-        if hasattr(basic_data, 'lawn_mower') and basic_data.lawn_mower:
-            basic_data.lawn_mower.register_pose_callback(self._on_pose)
+    async def async_added_to_hass(self) -> None:
+        """Register the live pose callback once the entity is attached to hass."""
+        await super().async_added_to_hass()
+        self._try_register_callback()
+
+    def _try_register_callback(self) -> None:
+        if self._callback_registered:
+            return
+        lawn_mower = getattr(self.basic_data, 'lawn_mower', None)
+        if lawn_mower:
+            lawn_mower.register_pose_callback(self._on_pose)
+            self._callback_registered = True
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -857,25 +882,37 @@ class TerraMowPoseSensor(SensorEntity):
         self._pose = pose
         self.async_write_ha_state()
 
+    def _current_pose(self) -> dict[str, Any]:
+        """Return the latest pose, falling back to a live read if the
+        push callback hasn't populated anything yet (e.g. still waiting
+        to be registered, or registered after the mower's first pose)."""
+        if self._pose:
+            return self._pose
+        # 只是懒读取兜底，不重新尝试注册回调（避免每次轮询都重复注册）。
+        lawn_mower = getattr(self.basic_data, 'lawn_mower', None)
+        return (lawn_mower.pose if lawn_mower else {}) or {}
+
     @property
     def native_value(self) -> float | None:
         """Return the sensor value (yaw)."""
-        if not self._pose:
+        pose = self._current_pose()
+        if not pose:
             return None
-        yaw = self._pose.get('yaw')
+        yaw = pose.get('yaw')
         return float(yaw) if yaw is not None else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra attributes."""
-        if not self._pose:
+        pose = self._current_pose()
+        if not pose:
             return {}
         return {
-            'x': self._pose.get('x'),
-            'y': self._pose.get('y'),
-            'yaw': self._pose.get('yaw'),
-            'timestamp_ms': self._pose.get('timestamp_ms'),
-            'frame': self._pose.get('frame'),
+            'x': pose.get('x'),
+            'y': pose.get('y'),
+            'yaw': pose.get('yaw'),
+            'timestamp_ms': pose.get('timestamp_ms'),
+            'frame': pose.get('frame'),
         }
 
     @property
