@@ -680,6 +680,29 @@ def _simplify_path_pixels(
     return filtered
 
 
+_PATH_ROUND_CAP_ANGLE_DEG = 20.0  # 转弯角度超过这个阈值才需要补圆点，否则直线段自己足够平滑
+
+
+def _path_point_needs_round_cap(pixels: list[tuple[int, int]], index: int) -> bool:
+    """判断路径上第 index 个点是否需要补一个圆点来让接缝变圆滑。
+    起点/终点（线段端点）总是需要，中间点只有在转弯角度明显、或者和前后点重合
+    （原地掉头/停留）时才需要，普通直线段上的点跳过，避免密集点堆成一堆圆点。"""
+    if index == 0 or index == len(pixels) - 1:
+        return True
+    x0, y0 = pixels[index - 1]
+    x1, y1 = pixels[index]
+    x2, y2 = pixels[index + 1]
+    v1x, v1y = x1 - x0, y1 - y0
+    v2x, v2y = x2 - x1, y2 - y1
+    len1 = math.hypot(v1x, v1y)
+    len2 = math.hypot(v2x, v2y)
+    if len1 == 0 or len2 == 0:
+        return True
+    cos_angle = max(-1.0, min(1.0, (v1x * v2x + v1y * v2y) / (len1 * len2)))
+    angle_deg = math.degrees(math.acos(cos_angle))
+    return angle_deg > _PATH_ROUND_CAP_ANGLE_DEG
+
+
 def _extract_map_extent(map_data: dict[str, Any]) -> list[tuple[float, float]]:
     """根据 width/height/resolution/origin 推导地图外框。"""
     width = _coerce_float(map_data.get("width"))
@@ -2364,9 +2387,16 @@ class TerraMowMapCamera(Camera):
             draw.line(pixels, fill=glow_color, width=glow_width, joint="curve")
             draw.line(pixels, fill=inner_color, width=inner_width, joint="curve")
 
+        # 只在路径真正拐弯（或首尾端点）的地方补一个圆点来让接缝变圆滑；
+        # 之前是每一个点都补一个圆点，路径点密集时（慢速移动、原地调整朝向等）
+        # 圆点大量重叠堆积，看起来就成了"一堆圆点"而不是一条线，尤其是外层
+        # 柔光（glow）半径比线宽本身大不少，密集点上这个问题最明显。
+        # 近似直线的路段本身线宽（joint="curve"）已经足够平滑，不需要额外圆点。
         glow_radius = max(1, glow_width // 2)
         inner_radius = max(1, inner_width // 2)
-        for x, y in pixels:
+        for index, (x, y) in enumerate(pixels):
+            if not _path_point_needs_round_cap(pixels, index):
+                continue
             draw.ellipse(
                 [x - glow_radius, y - glow_radius, x + glow_radius, y + glow_radius],
                 fill=glow_color,
@@ -2436,17 +2466,19 @@ class TerraMowMapCamera(Camera):
             default_inner_width = 10
             default_glow_width = 16
             simplify_epsilon = 1.1
-            simplify_min_segment = 1.2
+            simplify_min_segment = max(1.2, default_glow_width * 0.5)
         else:
             default_inner = COLOR_PATH_CURRENT
             default_glow = COLOR_PATH_CURRENT_GLOW
             default_inner_width = 12
             default_glow_width = 18
             # 由 "Path Simplify Tolerance" 数值实体调节：值越大，轨迹上保留的点越少
-            # （更简化、渲染更快），值越小则保留更多细节。min_segment 按默认 0.9:1.0 的
-            # 比例跟着一起缩放，保持两者原本的相对关系。
+            # （更简化、渲染更快），值越小则保留更多细节。
+            # min_segment 额外保底到线宽（glow_width）的一半：两个点如果比线本身
+            # 还窄，中间夹的圆点只会互相重叠糊成一团，看起来像一串多余的小圆点，
+            # 而不是贴着线宽自然过渡，所以再密的原始点也不需要都画出来。
             simplify_epsilon = max(0.1, float(getattr(self.basic_data, "path_simplify_tolerance", 0.9)))
-            simplify_min_segment = simplify_epsilon * (1.0 / 0.9)
+            simplify_min_segment = max(simplify_epsilon * (1.0 / 0.9), default_glow_width * 0.5)
 
         pixels = [transformer.to_pixel(point["x"], point["y"]) for point in path_points]
         pixels = _simplify_path_pixels(pixels, simplify_epsilon, simplify_min_segment)
