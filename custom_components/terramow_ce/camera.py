@@ -1890,9 +1890,10 @@ class TerraMowMapCamera(Camera):
             map_rect = self._get_map_rect()
             compass_half = 22
             compass_gap = 16
-            compass_bounds_right, compass_bounds_top = (
-                (extent_rect[2], extent_rect[1]) if extent_rect is not None else (map_rect[2] - 4, map_rect[1] + 4)
-            )
+            # 固定贴着地图卡片本身的右上角（而不是地图内容的实际范围 extent_rect），
+            # 这样无论地图内容有没有铺满卡片，指南针都稳定停在卡片的真正角落上，
+            # 和图例改成锚定卡片本身是同一个道理。
+            compass_bounds_right, compass_bounds_top = (map_rect[2] - 4, map_rect[1] + 4)
             compass_center = (
                 compass_bounds_right - compass_gap - compass_half,
                 compass_bounds_top + compass_gap + compass_half,
