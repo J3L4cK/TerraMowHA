@@ -709,7 +709,14 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
             
             # 主动请求版本兼容性信息
             self._request_compatibility_info()
-            
+
+            # 主动请求一次预约信息。dp_138 是 Robot->HA 单向上报，设备似乎
+            # 只在内部重新计算下一次预约时才会推送（例如"每3天"这种较长
+            # 周期的计划，可能好几天都不会自然触发一次推送），不像大多数
+            # dp 那样连接后马上有数据。参照 dp_127（版本兼容性）已经验证
+            # 过的"连接后主动请求一次"模式，这里做同样的尝试。
+            self._request_schedule_info()
+
             self.update_activity_from_state()
         else:
             _LOGGER.error(f"MQTT connection failed with code {rc}")
@@ -1488,3 +1495,12 @@ class TerraMowLawnMowerEntity(LawnMowerEntity):
             self.publish_data_point(COMPATIBILITY_INFO_DP, request_data)
         except Exception as e:
             _LOGGER.error("Failed to request version compatibility information: %s", e)
+
+    def _request_schedule_info(self):
+        """Request upcoming schedule information (dp_138)."""
+        try:
+            _LOGGER.info("Requesting upcoming schedule information")
+            request_data = {"seq": self.get_cmd_seq()}
+            self.publish_data_point(138, request_data)
+        except Exception as e:
+            _LOGGER.error("Failed to request upcoming schedule information: %s", e)
