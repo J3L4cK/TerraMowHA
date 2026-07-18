@@ -51,8 +51,9 @@ COLOR_TEXT_WHITE = (255, 255, 255, 255)
 COLOR_MAP_DEFAULT_FILL = (220, 224, 232, 255)
 COLOR_MAP_DEFAULT_OUTLINE = (198, 199, 204, 255)
 COLOR_CHANNEL = (255, 196, 0, 255)
-# 跨区通道画成一条"马路"：灰色沥青路面 + 黄色路缘（复用 COLOR_CHANNEL）+ 白色虚线车道线
+# 跨区通道画成一条纯灰色"马路"（不再用黄色）：沥青路面 + 深灰路缘/端点 + 白色虚线车道线
 COLOR_TUNNEL_ROAD = (104, 108, 116, 255)
+COLOR_TUNNEL_ROAD_OUTLINE = (58, 61, 67, 255)
 COLOR_TUNNEL_LANE_LINE = (255, 255, 255, 235)
 COLOR_RESTRICTED_FILL = (239, 68, 68, 28)
 COLOR_RESTRICTED_OUTLINE = (239, 68, 68, 255)
@@ -1900,9 +1901,9 @@ class TerraMowMapCamera(Camera):
                 self._draw_dashed_polyline(draw, pixels, COLOR_RESTRICTED_OUTLINE, 4, 12, 8)
 
         for tunnel in scene["cross_boundary_tunnels"]:
-            self._draw_tunnel(image, draw, transformer, tunnel, COLOR_TUNNEL_ROAD, COLOR_CHANNEL)
+            self._draw_tunnel(image, draw, transformer, tunnel, COLOR_TUNNEL_ROAD, COLOR_TUNNEL_ROAD_OUTLINE)
         for tunnel in scene["virtual_cross_boundary_tunnels"]:
-            self._draw_tunnel(image, draw, transformer, tunnel, COLOR_TUNNEL_ROAD, COLOR_CHANNEL)
+            self._draw_tunnel(image, draw, transformer, tunnel, COLOR_TUNNEL_ROAD, COLOR_TUNNEL_ROAD_OUTLINE)
 
         for marker in scene["cross_boundary_markers"]:
             self._draw_marker(image, transformer.to_pixel(marker[0], marker[1]), COLOR_CHANNEL, "diamond")
@@ -2111,7 +2112,7 @@ class TerraMowMapCamera(Camera):
         fill: tuple[int, int, int, int],
         outline: tuple[int, int, int, int],
     ) -> None:
-        """绘制跨区通道：做成一条"马路"——黄色路缘 + 灰色沥青路面 + 白色虚线车道线。"""
+        """绘制跨区通道：纯灰色沥青"马路"（无黄色）+ 白色虚线车道线。"""
         for polygon in tunnel.get("polygons", []):
             self._draw_polygon(image, draw, transformer, polygon, fill, outline, 3)
 
@@ -2119,12 +2120,12 @@ class TerraMowMapCamera(Camera):
             pixels = transformer.to_pixels(polyline)
             if len(pixels) < 2:
                 continue
-            # 路缘：较宽的黄色描边打底
+            # 路缘：深灰描边打底，只用于和路面拉开一点明暗层次，不再用黄色
             draw.line(pixels, fill=outline, width=15, joint="curve")
-            # 路面：灰色沥青，比路缘窄一圈，两侧露出黄色路缘
+            # 路面：浅一档的灰色沥青，比路缘窄一圈，两侧露出深灰路缘
             draw.line(pixels, fill=fill, width=11, joint="curve")
-            # 车道线：居中的白色虚线，呼应真实马路的车道标线
-            self._draw_dashed_polyline(draw, pixels, COLOR_TUNNEL_LANE_LINE, 2, 14, 10)
+            # 车道线：白色虚线，实线段比间隔短，更接近真实马路车道标线的比例
+            self._draw_dashed_polyline(draw, pixels, COLOR_TUNNEL_LANE_LINE, 3, 8, 18)
             for point in (pixels[0], pixels[-1]):
                 radius = 7
                 draw.ellipse(
@@ -2768,7 +2769,7 @@ class TerraMowMapCamera(Camera):
             (scene["scene_counts"]["required_zones"], "Required", COLOR_REQUIRED_OUTLINE),
             (scene["scene_counts"]["pass_through_zones"], "Pass-through", COLOR_PASS_THROUGH_OUTLINE),
             (no_go_count, "No-go", COLOR_RESTRICTED_OUTLINE),
-            (tunnel_count, "Tunnel", COLOR_CHANNEL),
+            (tunnel_count, "Tunnel", COLOR_TUNNEL_ROAD_OUTLINE),
             (obstacle_count, "Obstacle", COLOR_OBSTACLE_OUTLINE),
         ]
         items = [(label, color) for count, label, color in candidates if count > 0]
